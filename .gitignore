@@ -1,4 +1,5 @@
 .clj-kondo/
 .coverage
 .lsp
+__pycache__
 conda/
