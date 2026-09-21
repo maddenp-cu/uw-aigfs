@@ -285,7 +285,7 @@ app:
 To set up the `aigfs.yaml` configuration and run the `prep` step on a Linux system with `podman`:
 
 ``` bash
-run="podman run -v .:/run/aigfs ghcr.io/maddenp-cu/aigfs:latest run cmd"
+run="podman run --rm -v .:/run/aigfs ghcr.io/maddenp-cu/aigfs:latest run cmd"
 $run setup --platform oci /run/aigfs/user.yaml
 $run uw execute --module aigfs.drivers.ics --classname AIGFSICs --task run --config /run/aigfs/aigfs.yaml --cycle 2026-09-16T06 --key-path prep
 ```

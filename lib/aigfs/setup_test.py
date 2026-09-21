@@ -51,8 +51,8 @@ def test_setup_INCLUDE_DIR__ecflow_tail_uses_ssl():
     assert "ecflow_client --complete" in text
 
 
-@mark.parametrize("workflow", ["rocoto", "ecflow"])
-def test_setup_compose_configs(tmp_path, workflow):
+@mark.parametrize("workflow", ["rocoto", "ecflow", None])
+def test_setup_compose_configs(logcap, tmp_path, workflow):
     platform = "ursa"
     user_config_files = [Path("/path/to/a.yaml")]
     with (
@@ -66,10 +66,11 @@ def test_setup_compose_configs(tmp_path, workflow):
         NamedTemporaryFile().__enter__.return_value = tmp
         result = setup.compose_configs(workflow, platform, user_config_files)
     assert result == {STR.app: {STR.rundir: "/some/path"}}
+    workflow_configs = [setup.ETCDIR / STR.workflow / f"{workflow}.yaml"] if workflow else []
     compose_to_dict.assert_called_once_with(
         [
             setup.ETCDIR / STR.base_yaml,
-            setup.ETCDIR / STR.workflow / f"{workflow}.yaml",
+            *workflow_configs,
             setup.PLATFORMDIR / "ursa.yaml",
             Path("/path/to/a.yaml"),
             reserved_path,
@@ -78,6 +79,8 @@ def test_setup_compose_configs(tmp_path, workflow):
     )
     expected = {STR.app: {STR.home: str(setup.HOMEDIR), STR.platform: {STR.name: "ursa"}}}
     assert YAMLConfig(reserved_path) == expected
+    msg = "No --workflow value supplied, omitting workflow support"
+    assert (msg in logcap.text) == (workflow is None)
 
 
 @mark.parametrize("workflow", ["rocoto", "ecflow", None])
@@ -86,13 +89,20 @@ def test_setup_main(workflow):
         patch.object(setup, "compose_configs") as compose_configs,
         patch.object(setup, "parse_args") as parse_args,
         patch.object(setup, "set_up_rundir") as set_up_rundir,
+        patch.object(setup, "use_uwtools_logger") as use_uwtools_logger,
         patch.object(setup, "validate") as validate,
     ):
-        args = Mock(platform="ursa", workflow=workflow, user_config_files=[Path("/path/to/a.yaml")])
+        args = Mock(
+            platform="ursa",
+            verbose=True,
+            workflow=workflow,
+            user_config_files=[Path("/path/to/a.yaml")],
+        )
         parse_args.return_value = args
         compose_configs.return_value = {STR.app: {"key": "val"}}
         setup.main()
         parse_args.assert_called_once_with()
+        use_uwtools_logger.assert_called_once_with(verbose=True)
         compose_configs.assert_called_once_with(workflow, "ursa", [Path("/path/to/a.yaml")])
         config = {STR.app: {"key": "val"}}
         validate.assert_called_once_with(config)
@@ -100,25 +110,35 @@ def test_setup_main(workflow):
 
 
 @mark.parametrize(
-    ("argv", "expected_platform", "expected_workflow", "expected_files"),
+    ("argv", "expected_platform", "expected_workflow", "expected_files", "expected_verbose"),
     [
         (
             ["--platform", "ursa", "--workflow", "rocoto", "/path/to/a.yaml", "/path/to/b.yaml"],
             "ursa",
             "rocoto",
             [Path("/path/to/a.yaml"), Path("/path/to/b.yaml")],
+            False,
         ),
         (
             ["--platform", "ursa", "/path/to/a.yaml", "--workflow", "ecflow"],
             "ursa",
             "ecflow",
             [Path("/path/to/a.yaml")],
+            False,
         ),
         (
             ["--workflow", "ecflow", "--platform", "ursa", "/path/to/a.yaml"],
             "ursa",
             "ecflow",
             [Path("/path/to/a.yaml")],
+            False,
+        ),
+        (
+            ["--platform", "oci", "--verbose", "/path/to/a.yaml"],
+            "oci",
+            None,
+            [Path("/path/to/a.yaml")],
+            True,
         ),
         (
             ["--platform", "oci", "/path/to/a.yaml"],
@@ -128,7 +148,9 @@ def test_setup_main(workflow):
         ),
     ],
 )
-def test_setup_parse_args(argv, expected_platform, expected_workflow, expected_files):
+def test_setup_parse_args(
+    argv, expected_platform, expected_workflow, expected_files, expected_verbose
+):
     with (
         patch.object(setup, "platforms", return_value=["oci", "ursa"]),
         patch("sys.argv", ["prog", *argv]),
@@ -137,6 +159,7 @@ def test_setup_parse_args(argv, expected_platform, expected_workflow, expected_f
     assert result.platform == expected_platform
     assert result.workflow == expected_workflow
     assert result.user_config_files == expected_files
+    assert result.verbose == expected_verbose
 
 
 def test_setup_set_up_rundir(logcap, tmp_path):

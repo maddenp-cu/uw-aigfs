@@ -21,6 +21,8 @@ def compose_configs(workflow: str | None, platform: str, user_config_files: list
     """
     Compose and realize base, platform, and user configs.
     """
+    if not workflow:
+        logging.debug("No --workflow value supplied, omitting workflow support")
     with NamedTemporaryFile(delete=True) as tmp:
         p_base = ETCDIR / STR.base_yaml
         p_workflow = ETCDIR / STR.workflow / f"{workflow}.yaml" if workflow else None
@@ -36,8 +38,8 @@ def main() -> None:
     """
     Stage the AIGFS config and workflow manager artifacts in the run directory.
     """
-    use_uwtools_logger()
     args = parse_args()
+    use_uwtools_logger(verbose=args.verbose)
     config = compose_configs(args.workflow, args.platform, args.user_config_files)
     validate(config)
     set_up_rundir(config, args.workflow)
@@ -55,6 +57,11 @@ def parse_args() -> argparse.Namespace:
         metavar="PLATFORM",
         required=True,
         type=str,
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="enable verbose logging",
     )
     parser.add_argument(
         "--workflow",
