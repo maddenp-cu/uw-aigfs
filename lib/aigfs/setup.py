@@ -59,15 +59,15 @@ def parse_args() -> argparse.Namespace:
         type=str,
     )
     parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="enable verbose logging",
-    )
-    parser.add_argument(
         "--workflow",
         choices=["ecflow", "rocoto"],
         help="workflow manager",
         required=False,
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="enable verbose logging",
     )
     parser.add_argument(
         "user_config_files",
