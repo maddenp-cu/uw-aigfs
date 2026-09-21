@@ -3,7 +3,6 @@
 set -aeuo pipefail
 
 # Export CONDADIR to specify alternate conda install path.
-# Export DEVMODE to install development packages.
 
 # Tools:
 
@@ -32,6 +31,12 @@ bootstrap() {
   fi
 }
 
+cmd() {
+  activate $(env)
+  $@
+  conda deactivate
+}
+
 deploy() {
   local d playbook
   test $# -eq 0 && echo "usage: $(basename $0) ${FUNCNAME[0]} <playbook>" && exit 1
@@ -55,7 +60,7 @@ makedocs() {
 }
 
 makeenv() {
-  local condadir dir_a dir_d env envdir libdir
+  local condadir dir_a dir_d env envdir libdir prefix update
   condadir=$(condadir)
   env=$(env)
   bootstrap
@@ -95,11 +100,14 @@ unset AIGFS_OLD_PATH
 EOF
     msg Created environment $env
   fi
-  if [[ -v DEVMODE ]]; then
-    msg Installing dev packages into environment $env
-    conda env update --file $(dirname $(envyaml))/devpkgs.yaml --name $env --quiet
-    msg Installed dev packages into environment $env
-  fi
+  while [[ $# -gt 0 ]]; do
+    prefix=$1
+    shift
+    update=$(dirname $(envyaml))/$prefix.yaml
+    msg Updating environment $env with $prefix
+    conda env update --file $update --name $env --quiet
+    msg Updated environment $env with $prefix
+  done
   unset PIP_VERBOSE XDG_CACHE_HOME
 }
 
@@ -195,7 +203,7 @@ env() {
 }
 
 envyaml() {
-  echo $(rootdir)/etc/env/environment.yaml
+  echo $(rootdir)/etc/env/aigfs.yaml
 }
 
 fromroot() {

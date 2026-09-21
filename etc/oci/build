@@ -1,0 +1,14 @@
+#!/bin/bash
+
+set -euo pipefail
+
+keep=(ca-certificates make)
+lose=(curl g++ git)
+
+apt-get update
+apt-get install --yes --no-install-recommends ${keep[*]} ${lose[*]}
+make env
+apt-get purge --yes ${lose[*]}
+apt-get autoremove --yes
+apt-get clean
+rm -rf .git /tmp/* /var/cache/apt/archives/* /var/lib/apt/lists/* /var/tmp/*

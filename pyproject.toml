@@ -13,7 +13,8 @@ warn_return_any = true
 
 [tool.pytest.ini_options]
 filterwarnings = [
-  "ignore:jsonschema.RefResolver is deprecated:DeprecationWarning" # from uwtools
+  "ignore:The 'generic' unit for NumPy timedelta is deprecated:DeprecationWarning", # from aigfs
+  "ignore:jsonschema.RefResolver is deprecated:DeprecationWarning", # from uwtools
 ]
 
 [tool.ruff]

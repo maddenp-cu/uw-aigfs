@@ -22,6 +22,7 @@ Welcome to the `uw-aigfs` Contributor Guide. Please familiarize yourself with an
   - [Production User Deploy Procedure](#production-user-deploy-procedure)
   - [Developer Testing Procedure](#developer-testing-procedure)
   - [Application Directory Layout](#application-directory-layout)
+- [Containerized AIGFS](#containerized-aigfs)
 
 ## Developer Setup
 
@@ -33,7 +34,7 @@ Welcome to the `uw-aigfs` Contributor Guide. Please familiarize yourself with an
 make devenv
 ```
 
-This installs [Miniforge](https://github.com/conda-forge/miniforge) into `conda/`, creates the `aigfs` conda environment from `etc/env/environment.yml`, then installs additional developer tools (linters, formatters, test runners) listed in `etc/env/devpkgs.yaml`.
+This installs [Miniforge](https://github.com/conda-forge/miniforge) into `conda/`, creates the `aigfs` conda environment from `etc/env/aigfs.yaml`, then installs additional developer tools (linters, formatters, test runners) listed in `etc/env/dev.yaml`.
 
 This command can also be run later to upgrade a non-development environment to a developer environment.
 
@@ -145,11 +146,14 @@ Use the _Conversation_ tab of your PR to ask for help with any difficulties you 
 │   ├── ansible                    # Ansible deployment assets
 │   ├── app                        # AIGFS configuration files
 │   ├── env                        # Conda environment definitions
-│   │   ├── devpkgs.yaml           # Developer packages
-│   │   └── environment.yaml       # Core AIGFS environment definition
+│   │   ├── aigfs.yaml             # Core AIGFS environment definition
+│   │   └── dev.yaml               # Developer packages
 │   ├── grib-in.yaml               # Config for extracting GRIB messages to netCDF ICs
 │   ├── grib-out.json              # Config for writing GRIB forecast data
 │   ├── modulefiles                # System modules
+│   ├── oci                        # Container support files
+│   │   ├── Containerfile          # Container image build recipe
+│   │   └── build                  # In-image build script
 │   ├── platform                   # Per-platform YAML overrides
 │   └── workflow                   # Workflow files
 │       ├── ecflow.yaml            # ecFlow base config
@@ -255,5 +259,54 @@ Per-task run directories have structure and content specific to each task, but s
 ```
 
 Values for `<driver>` are `aigfs_ics`, `aigfs_inference`, and `aigfs_post`.
+
+## Containerized AIGFS
+
+**This section contains work-in-progress development notes and is unlikely to be complete or fully correct.**
+
+To build an [OCI](https://opencontainers.org/) container image containing the AIGFS application and its supporting software runtime from the root directory of a git clone of this repository:
+
+1. Ensure that there are no uncommitted changes and no unversioned files in the clone. Commit (or stash) any changes, and run `git clean -dfx` to remove any unversioned files. **Be sure to back up anything you do not want to lose first. For example, if you previously ran `make env` or similar to create a `conda/` installation in the clone root, you may want to temporarily move it elsewhere and move it back later.**
+2. Copy the AIGFS model files (`params/` and `stats/` -- see the [User Guide](user_guide.md#the-model-directory)) into a `model/` directory in the clone root.
+3. Ensure that the `podman` and `qemu-user-static` (Debian names; translate as needed for other Linux OSes) OS packages are installed.
+4. Optionally, run `podman system prune --all` to clear old `podman` resources. **Be sure you don't need anything listed by e.g. `podman images`.**
+5. Run `make container`.
+
+You may optionally push the resulting container image to a remote container registry, but instructions for doing so are beyond the scope of this documentation.
+
+You may now run commands inside the container. In a new, empty directory, create `user.yaml` with content similar to
+
+``` yaml
+app:
+  first_cycle: !datetime 2026-09-16T12
+  last_cycle: !datetime 2026-09-16T12
+```
+
+To set up the `aigfs.yaml` configuration and run the `prep` step on a Linux system with `podman`:
+
+``` bash
+run="podman run -v .:/run/aigfs ghcr.io/maddenp-cu/aigfs:latest run cmd"
+$run setup --platform oci /run/aigfs/user.yaml
+$run uw execute --module aigfs.drivers.ics --classname AIGFSICs --task run --config /run/aigfs/aigfs.yaml --cycle 2026-09-16T06 --key-path prep
+```
+
+- `-v .:/run/aigfs` instructs `podman` to *bind mount* the current directory to the path `/run/aigfs` inside the container. This is the same path that will appear as `app.rundir` in the generated `aigfs.yaml`.
+- `ghcr.io/maddenp-cu/aigfs:latest` identifies the container image to use. Since `make container` tagged the container image created above with this tag, the image should be found locally. (Otherwise, it would be downloaded from the remote container registry it is published to.)
+- `run cmd` executes the `bin/run` script copied from the repo into the container with the `cmd` argument, which calls a function called `cmd()` that runs the remaining arguments with the AIGFS conda environment activated. (The container image is built such that the `run` script will be on `PATH` inside the container.)
+- Note that, from the perspective of the commands run in the container, `/run/aigfs` refers to the current directory on the host system.
+
+To run the same plus the `forecast` step on Ursa with `apptainer`:
+
+``` bash
+apptainer pull aigfs.sif docker://ghcr.io/maddenp-cu/aigfs:latest
+run="apptainer exec -B .:/run/aigfs aigfs.sif run cmd"
+$run setup --platform oci /run/aigfs/user.yaml
+$run uw execute --module aigfs.drivers.ics --classname AIGFSICs --task run --config /run/aigfs/aigfs.yaml --cycle 2026-09-16T06 --key-path prep
+srun --exclusive --nodes 1 --time 00:20:00 $run uw execute --module aigfs.drivers.inference --classname AIGFSInference --task run --config /run/aigfs/aigfs.yaml --cycle 2026-09-16T06 --key-path forecast
+```
+
+- The `apptainer pull` command fetches the OCI container and converts it to Apptainer's format, saving it as `aigfs.sif`.
+- The `-B` argument to `apptainer` performs the same bind mount as `-v` for `podman`.
+- The `forecast` step needs to run on a batch node, so it executed under `srun`.
 
 [← Back to Index](index.md)

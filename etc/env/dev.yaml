@@ -2,7 +2,6 @@ channels:
   - conda-forge
 dependencies:
   - go-shfmt 3.13.*
-  - jq 1.8.*
   - make 4.4.*
   - mypy 2.2.*
   - pandas-stubs

@@ -57,7 +57,7 @@ class Platform(BaseModel):
 
     name: str
     partition: Partition | None = None
-    scheduler: Scheduler
+    scheduler: Scheduler | None = None
 
     @field_validator(STR.name)
     @classmethod

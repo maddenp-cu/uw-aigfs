@@ -36,7 +36,6 @@ prep:
       data/{{ app.time.m1_yyyymmdd }}-gfs.t{{ app.time.m1_hh }}z.pgrb2.0p25.f006: '{{ user.gfs_data }}/gfs.{{ app.time.m1_yyyymmdd }}/{{ app.time.m1_hh }}/atmos/gfs.t{{ app.time.m1_hh }}z.pgrb2.0p25.f006'
       data/{{ app.time.m2_yyyymmdd }}-gfs.t{{ app.time.m2_hh }}z.pgrb2.0p25.f006: '{{ user.gfs_data }}/gfs.{{ app.time.m2_yyyymmdd }}/{{ app.time.m2_hh }}/atmos/gfs.t{{ app.time.m2_hh }}z.pgrb2.0p25.f006'
       data/{{ app.time.yyyymmdd }}-gfs.t{{ app.time.hh }}z.pgrb2.0p25.f000: '{{ user.gfs_data }}/gfs.{{ app.time.yyyymmdd }}/{{ app.time.hh }}/atmos/gfs.t{{ app.time.hh }}z.pgrb2.0p25.f000'
-    files_to_hardlink: !remove
 user:
   gfs_data: https://noaa-gfs-bdp-pds.s3.amazonaws.com
 workflow:

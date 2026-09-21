@@ -4,6 +4,7 @@ channels:
   - ufs-community
 dependencies:
   - grib2io 2.8.*
+  - jq 1.8.*
   - netcdf4 1.7.*
   - pip
   - pydantic 2.13.*
