@@ -17,12 +17,15 @@ from aigfs.strings import STR
 from aigfs.validation import validate
 
 
-def compose_configs(workflow: str | None, platform: str, user_config_files: list[Path]) -> dict:
+def compose_configs(
+    workflow: str | None, platform: str, user_config_files: list[Path], taskname: str | None = None
+) -> dict:
     """
     Compose and realize base, platform, and user configs.
     """
     if not workflow:
-        logging.debug("No --workflow value supplied, omitting workflow support")
+        msg = "%sNo --workflow value supplied, omitting workflow support"
+        logging.debug(msg, _prefix(taskname))
     with NamedTemporaryFile(delete=True) as tmp:
         p_base = ETCDIR / STR.base_yaml
         p_workflow = ETCDIR / STR.workflow / f"{workflow}.yaml" if workflow else None
@@ -79,20 +82,24 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def set_up_rundir(config: dict, workflow: str | None) -> None:
+def set_up_rundir(config: dict, workflow: str | None, taskname: str | None = None) -> None:
     """
     Create and populate the run directory.
     """
     rundir = Path(config[STR.app][STR.rundir])
-    logging.info("AIGFS will be set up here: %s", rundir)
+    logging.info("%sAIGFS will be set up here: %s", _prefix(taskname), rundir)
     rundir.mkdir(parents=True, exist_ok=True)
     final = rundir / STR.aigfs_yaml
     YAMLConfig(config).dump(final)
     if workflow == "ecflow":
         ecflow.realize(YAMLConfig(config), rundir, scripts_path=rundir / "ecf")
     elif workflow == "rocoto" and not rocoto.realize(YAMLConfig(config), rundir / STR.rocoto_xml):
-        logging.error("Invalid Rocoto XML")
+        logging.error("%sInvalid Rocoto XML", _prefix(taskname))
         sys.exit(1)
+
+
+def _prefix(taskname: str | None) -> str:
+    return f"{taskname}: " if taskname else ""
 
 
 if __name__ == "__main__":

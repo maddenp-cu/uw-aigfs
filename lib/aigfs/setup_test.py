@@ -145,6 +145,7 @@ def test_setup_main(workflow):
             "oci",
             None,
             [Path("/path/to/a.yaml")],
+            False,
         ),
     ],
 )

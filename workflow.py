@@ -19,11 +19,14 @@ def config(c: C) -> Iterator:
     c = _dt(c)
     name = "Cycle %s config" % c
     yield name
-    path = Path("aigfs.yaml")
+    path = Path(DIR / "aigfs.yaml")
     yield Asset(path, path.is_file)
     yield None
-    config = setup.compose_configs(workflow=None, platform="oci", user_config_files=[f"{DIR}/user.yaml"])
-    print(config)
+    config = setup.compose_configs(
+        workflow=None, platform="oci", user_config_files=[Path(f"{DIR}/user.yaml")]
+    )
+    setup.validate(config)
+    setup.set_up_rundir(config, workflow=None, taskname=name)
     # cmd = [f"{CMD} setup", "--platform oci", f"{DIR}/user.yaml"]
     # run_shell_cmd(" ".join(cmd), taskname=name)
 
