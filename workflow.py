@@ -9,11 +9,11 @@ from aigfs import setup
 from aigfs.drivers.ics import AIGFSICs
 from iotaa import Asset, collection, external, task
 
-# DIR = Path("/run/aigfs")
-DIR = Path("/home/maddenp/git/uw-aigfs")
-CMD = f"podman run -v .:{DIR} ghcr.io/maddenp-cu/aigfs:latest run cmd"
-
 type CycleT = datetime | str
+
+DIR = Path("/home/maddenp/git/uw-aigfs")  # /run/aigfs
+CFG = DIR / "aigfs.yaml"
+CMD = f"podman run -v .:{DIR} ghcr.io/maddenp-cu/aigfs:latest run cmd"
 
 # Public tasks:
 
@@ -23,13 +23,12 @@ def config(cycle_: CycleT) -> Iterator:
     cycle_ = _dt(cycle_)
     name = "Cycle %s config" % cycle_
     yield name
-    path = Path(DIR / "aigfs.yaml")
-    yield Asset(path, path.is_file)
+    yield Asset(CFG, CFG.is_file)
     yield None
-    user = Path(f"{DIR}/user.yaml")
-    config = setup.compose_configs(workflow=None, platform="oci", user_config_files=[user])
-    setup.validate(config)
-    setup.set_up_rundir(config, workflow=None, prefix=name)
+    user = DIR / "user.yaml"
+    c = setup.compose_configs(workflow=None, platform="oci", user_config_files=[user])
+    setup.validate(c)
+    setup.set_up_rundir(c, workflow=None, prefix=name)
 
 
 @collection
@@ -68,12 +67,8 @@ def prep(cycle_: CycleT) -> Iterator:
     fn = "aigfs.t%sz.ic.nc" % _hh(cycle_)
     path = _cycledir(cycle_) / step / fn
     yield Asset(path, path.is_file)
-    config_ = config(cycle_)
-    yield [_timegate(cycle_), config_]
-    driver = AIGFSICs(
-        cycle=cycle_, config=config_.ref, key_path=[step], schema_file=_schema(AIGFSICs)
-    )
-    driver.run()
+    driver = AIGFSICs(cycle=cycle_, config=CFG, key_path=[step], schema_file=_schema(AIGFSICs))
+    yield [_timegate(cycle_), driver.run()]
 
 
 # Private tasks:
