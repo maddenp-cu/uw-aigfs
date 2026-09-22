@@ -26,9 +26,9 @@ def config(c: C) -> Iterator:
         workflow=None, platform="oci", user_config_files=[Path(f"{DIR}/user.yaml")]
     )
     setup.validate(config)
-    setup.set_up_rundir(config, workflow=None, taskname=name)
+    setup.set_up_rundir(config, workflow=None, prefix=name)
     # cmd = [f"{CMD} setup", "--platform oci", f"{DIR}/user.yaml"]
-    # run_shell_cmd(" ".join(cmd), taskname=name)
+    # run_shell_cmd(" ".join(cmd), prefix=name)
 
 
 @collection
