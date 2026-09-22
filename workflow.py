@@ -22,13 +22,10 @@ def config(c: C) -> Iterator:
     path = Path(DIR / "aigfs.yaml")
     yield Asset(path, path.is_file)
     yield None
-    config = setup.compose_configs(
-        workflow=None, platform="oci", user_config_files=[Path(f"{DIR}/user.yaml")]
-    )
+    user = Path(f"{DIR}/user.yaml")
+    config = setup.compose_configs(workflow=None, platform="oci", user_config_files=[user])
     setup.validate(config)
     setup.set_up_rundir(config, workflow=None, prefix=name)
-    # cmd = [f"{CMD} setup", "--platform oci", f"{DIR}/user.yaml"]
-    # run_shell_cmd(" ".join(cmd), prefix=name)
 
 
 @collection
