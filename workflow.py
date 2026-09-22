@@ -1,12 +1,15 @@
+import inspect
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 from aigfs import setup
+from aigfs.drivers.ics import AIGFSICs
 from iotaa import Asset, collection, external, task
 from uwtools.api.utils import run_shell_cmd
 
-DIR = Path("/run/aigfs")
+# DIR = Path("/run/aigfs")
+DIR = Path("/home/maddenp/git/uw-aigfs")
 CMD = f"podman run -v .:{DIR} ghcr.io/maddenp-cu/aigfs:latest run cmd"
 
 type CycleT = datetime | str
@@ -58,22 +61,16 @@ def post(cycle_: CycleT) -> Iterator:
 @task
 def prep(cycle_: CycleT) -> Iterator:
     cycle_ = _dt(cycle_)
-    name = "Cycle %s prep" % cycle_
+    step = inspect.currentframe().f_code.co_name
+    name = "Cycle %s %s" % (cycle_, step)
     yield name
-    path = Path("prep/aigfs.t00z.ic.nc")
+    fn = "aigfs.t%sz.ic.nc" % _hh(cycle_)
+    path = _cycledir(cycle_) / step / fn
     yield Asset(path, path.is_file)
     config_ = config(cycle_)
     yield [_timegate(cycle_), config_]
-    cmd = [
-        f"{CMD} uw execute",
-        "--module aigfs.drivers.ics",
-        "--classname AIGFSICs",
-        "--task run",
-        f"--config {config_.ref}",
-        "--cycle %s" % cycle_.isoformat(),
-        "--key-path prep",
-    ]
-    run_shell_cmd(" ".join(cmd), taskname=name)
+    driver = AIGFSICs(cycle=cycle_, config=config_.ref, key_path=[step], schema_file=_schema(AIGFSICs))
+    driver.run()
 
 
 # Private tasks:
@@ -92,7 +89,19 @@ def _timegate(cycle_: datetime) -> Iterator:
 # Private helpers:
 
 
+def _cycledir(cycle_: datetime) -> Path:
+    return Path(cycle_.strftime("%Y%m%d"), _hh(cycle_))
+
+
 def _dt(cycle_: CycleT) -> datetime:
     if isinstance(cycle_, str):
         return datetime.fromisoformat(cycle_).replace(tzinfo=timezone.utc)
     return cycle_
+
+
+def _hh(cycle_: datetime) -> str:
+    return cycle_.strftime("%H")
+
+
+def _schema(class_: type) -> Path:
+    return Path(inspect.getfile(class_)).with_suffix(".jsonschema")
