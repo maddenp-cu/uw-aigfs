@@ -2,11 +2,12 @@ import inspect
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
+from types import FrameType
+from typing import cast
 
 from aigfs import setup
 from aigfs.drivers.ics import AIGFSICs
 from iotaa import Asset, collection, external, task
-from uwtools.api.utils import run_shell_cmd
 
 # DIR = Path("/run/aigfs")
 DIR = Path("/home/maddenp/git/uw-aigfs")
@@ -61,7 +62,7 @@ def post(cycle_: CycleT) -> Iterator:
 @task
 def prep(cycle_: CycleT) -> Iterator:
     cycle_ = _dt(cycle_)
-    step = inspect.currentframe().f_code.co_name
+    step = cast(FrameType, inspect.currentframe()).f_code.co_name
     name = "Cycle %s %s" % (cycle_, step)
     yield name
     fn = "aigfs.t%sz.ic.nc" % _hh(cycle_)
@@ -69,7 +70,9 @@ def prep(cycle_: CycleT) -> Iterator:
     yield Asset(path, path.is_file)
     config_ = config(cycle_)
     yield [_timegate(cycle_), config_]
-    driver = AIGFSICs(cycle=cycle_, config=config_.ref, key_path=[step], schema_file=_schema(AIGFSICs))
+    driver = AIGFSICs(
+        cycle=cycle_, config=config_.ref, key_path=[step], schema_file=_schema(AIGFSICs)
+    )
     driver.run()
 
 
