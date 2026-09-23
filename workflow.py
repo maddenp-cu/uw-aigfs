@@ -7,7 +7,7 @@ from typing import cast
 
 from aigfs import setup
 from aigfs.drivers.ics import AIGFSICs
-from iotaa import Asset, collection, external, task
+from iotaa import Asset, Node, collection, external, task
 
 type CycleT = datetime | str
 
@@ -67,8 +67,7 @@ def prep(cycle_: CycleT) -> Iterator:
     fn = "aigfs.t%sz.ic.nc" % _hh(cycle_)
     path = _cycledir(cycle_) / step / fn
     yield Asset(path, path.is_file)
-    driver = AIGFSICs(cycle=cycle_, config=CFG, key_path=[step], schema_file=_schema(AIGFSICs))
-    yield [_timegate(cycle_), driver.run()]
+    yield _timely(cycle_, AIGFSICs, step)
 
 
 # Private tasks:
@@ -103,3 +102,10 @@ def _hh(cycle_: datetime) -> str:
 
 def _schema(class_: type) -> Path:
     return Path(inspect.getfile(class_)).with_suffix(".jsonschema")
+
+
+def _timely(cycle_: datetime, class_: type, step: str) -> Node:
+    if (timegate := _timegate(cycle_)).ready:
+        driver = class_(cycle=cycle_, config=CFG, key_path=[step], schema_file=_schema(class_))
+        return cast(Node, driver.run())
+    return timegate
