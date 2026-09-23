@@ -21,15 +21,15 @@ CMD = f"podman run -v .:{DIR} ghcr.io/maddenp-cu/aigfs:latest run cmd"
 
 @task
 def config(cycle_: CycleT) -> Iterator:
-    cycle_ = _dt(cycle_)
-    name = "Cycle %s config" % cycle_
-    yield name
+    step = cast(FrameType, inspect.currentframe()).f_code.co_name
+    dt, taskname = _dt_taskname(cycle_, step)
+    yield taskname
     yield Asset(CFG, CFG.is_file)
     yield None
     user = DIR / "user.yaml"
     c = setup.compose_configs(workflow=None, platform="oci", user_config_files=[user])
     setup.validate(c)
-    setup.set_up_rundir(c, workflow=None, prefix=name)
+    setup.set_up_rundir(c, workflow=None, prefix=taskname)
 
 
 # @collection
