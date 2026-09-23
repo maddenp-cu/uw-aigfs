@@ -42,10 +42,21 @@ def config(cycle_: CycleT) -> Iterator:
 @task
 def forecast(cycle_: CycleT) -> Iterator:
     step = cast(FrameType, inspect.currentframe()).f_code.co_name
-    cycle_, taskname = _dt_taskname(cycle_, step)
+    dt, taskname = _dt_taskname(cycle_, step)
     yield taskname
-    yield Asset("foo", lambda: False)  # PM FIXME
-    yield _timely(cycle_, AIGFSInference, step, prep)
+    path = Path("foo")
+    yield Asset(path, path.is_file)
+    if (timegate := _timegate(dt)).ready:
+        schema = _schema(AIGFSInference)
+        driver = AIGFSInference(cycle=dt, config=CFG, key_path=[step], schema_file=schema)
+        yield driver.predictions(reqs=[prep(dt)])
+    else:
+        yield timegate
+    # step = cast(FrameType, inspect.currentframe()).f_code.co_name
+    # cycle_, taskname = _dt_taskname(cycle_, step)
+    # yield taskname
+    # yield Asset("foo", lambda: False)  # PM FIXME
+    # yield _timely(cycle_, AIGFSInference, step, prep)
 
 
 # @task
@@ -68,7 +79,7 @@ def prep(cycle_: CycleT) -> Iterator:
     if (timegate := _timegate(dt)).ready:
         schema = _schema(AIGFSICs)
         driver = AIGFSICs(cycle=dt, config=CFG, key_path=[step], schema_file=schema)
-        yield driver.run()
+        yield driver.merged_netcdf_files()
     else:
         yield timegate
 
@@ -107,10 +118,3 @@ def _hh(cycle_: datetime) -> str:
 
 def _schema(class_: type) -> Path:
     return Path(inspect.getfile(class_)).with_suffix(".jsonschema")
-
-
-def _timely(cycle_: datetime, class_: type, step: str, req: Callable | None = None) -> Node:
-    if (timegate := _timegate(cycle_)).ready:
-        driver = class_(cycle=cycle_, config=CFG, key_path=[step], schema_file=_schema(class_))
-        return cast(Node, driver.run([req] if req else None))
-    return timegate
