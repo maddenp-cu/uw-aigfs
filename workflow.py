@@ -52,11 +52,6 @@ def forecast(cycle_: CycleT) -> Iterator:
         yield driver.predictions(reqs=[prep(dt)])
     else:
         yield timegate
-    # step = cast(FrameType, inspect.currentframe()).f_code.co_name
-    # cycle_, taskname = _dt_taskname(cycle_, step)
-    # yield taskname
-    # yield Asset("foo", lambda: False)  # PM FIXME
-    # yield _timely(cycle_, AIGFSInference, step, prep)
 
 
 # @task
@@ -74,7 +69,7 @@ def prep(cycle_: CycleT) -> Iterator:
     step = cast(FrameType, inspect.currentframe()).f_code.co_name
     dt, taskname = _dt_taskname(cycle_, step)
     yield taskname
-    path = _cycledir(dt) / step / ("aigfs.t%sz.ic.nc" % _hh(dt))
+    path = _cycledir(dt) / step / ("aigfs.t%sz.ic.nc" % dt.strftime("%H"))
     yield Asset(path, path.is_file)
     if (timegate := _timegate(dt)).ready:
         schema = _schema(AIGFSICs)
@@ -98,7 +93,7 @@ def _timegate(cycle_: datetime) -> Iterator:
 
 
 def _cycledir(cycle_: datetime) -> Path:
-    return Path(cycle_.strftime("%Y%m%d"), _hh(cycle_))
+    return Path(cycle_.strftime("%Y%m%d%H"))
 
 
 def _dt(cycle_: CycleT) -> datetime:
@@ -110,10 +105,6 @@ def _dt(cycle_: CycleT) -> datetime:
 def _dt_taskname(cycle_: CycleT, step: str) -> tuple[datetime, str]:
     cycle_ = _dt(cycle_)
     return cycle_, "%s %s" % (cycle_.strftime("%Y%m%d %HZ"), step)
-
-
-def _hh(cycle_: datetime) -> str:
-    return cycle_.strftime("%H")
 
 
 def _schema(class_: type) -> Path:

@@ -25,7 +25,7 @@ forecast:
     ics_path: '{{ prep.aigfs_ics.rundir }}/aigfs.t{{ app.time.hh }}z.ic.nc'
     mean_path: '{{ app.modeldir }}/stats/mean_by_level.nc'
     model_weights_path: '{{ app.modeldir }}/params/weights.npz'
-    rundir: '{{ app.rundir }}/{{ app.time.yyyymmdd }}/{{ app.time.hh }}/forecast'
+    rundir: '{{ app.rundir }}/{{ app.time.yyyymmdd }}{{ app.time.hh }}/forecast'
     stddev_path: '{{ app.modeldir }}/stats/stddev_by_level.nc'
   platform:
     account: '{{ app.platform.scheduler.account }}'
@@ -44,7 +44,7 @@ post:
       - '{{ forecast.aigfs_inference.rundir }}/aigfs.t{{ app.time.hh }}z.sfc.f{{ app.time.fff }}.grib2'
       - '{{ forecast.aigfs_inference.rundir }}/aigfs.t{{ app.time.hh }}z.pres.f{{ app.time.fff }}.grib2'
     outputdir: '{{ post.aigfs_post.rundir }}'
-    rundir: '{{ app.rundir }}/{{ app.time.yyyymmdd }}/{{ app.time.hh }}/post_{{ app.time.fff }}'
+    rundir: '{{ app.rundir }}/{{ app.time.yyyymmdd }}{{ app.time.hh }}/post_{{ app.time.fff }}'
   platform:
     account: '{{ app.platform.scheduler.account }}'
     scheduler: '{{ app.platform.scheduler.type }}'
@@ -58,7 +58,7 @@ prep:
         walltime: 00:05:00
       executable: null
     grib_in_config: '{{ app.home }}/etc/grib-in.yaml'
-    rundir: '{{ app.rundir }}/{{ app.time.yyyymmdd }}/{{ app.time.hh }}/prep'
+    rundir: '{{ app.rundir }}/{{ app.time.yyyymmdd }}{{ app.time.hh }}/prep'
   platform:
     account: '{{ app.platform.scheduler.account }}'
     scheduler: '{{ app.platform.scheduler.type }}'
