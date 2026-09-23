@@ -1,5 +1,5 @@
 import inspect
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from types import FrameType
@@ -8,7 +8,7 @@ from typing import cast
 from aigfs import setup
 from aigfs.drivers.ics import AIGFSICs
 from aigfs.drivers.inference import AIGFSInference
-from iotaa import Asset, Node, external, task
+from iotaa import Asset, external, task
 
 type CycleT = datetime | str
 

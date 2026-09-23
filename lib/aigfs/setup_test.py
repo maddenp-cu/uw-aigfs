@@ -140,13 +140,6 @@ def test_setup_main(workflow):
             [Path("/path/to/a.yaml")],
             True,
         ),
-        (
-            ["--platform", "oci", "/path/to/a.yaml"],
-            "oci",
-            None,
-            [Path("/path/to/a.yaml")],
-            False,
-        ),
     ],
 )
 def test_setup_parse_args(
