@@ -40,12 +40,13 @@ def cycle(cyclestr: str) -> Iterator:
 
 @task
 def forecast(cycle_: CycleT) -> Iterator:
-    cycle_ = _dt(cycle_)
-    yield "Cycle %s forecast" % cycle_
-    path = Path("forecast")
-    Asset(path, path.is_file)
-    yield prep(cycle_)
-    path.touch()
+    step = cast(FrameType, inspect.currentframe()).f_code.co_name
+    cycle_, taskname = _dt_taskname(cycle_, step)
+    yield taskname
+    # fn = "aigfs.t%sz.ic.nc" % _hh(cycle_)
+    # path = _cycledir(cycle_) / step / fn
+    # yield Asset(path, path.is_file)
+    yield _timely(cycle_, AIGFSInference, step)
 
 
 @task
