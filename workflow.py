@@ -1,5 +1,5 @@
 import inspect
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from types import FrameType
@@ -7,7 +7,8 @@ from typing import cast
 
 from aigfs import setup
 from aigfs.drivers.ics import AIGFSICs
-from iotaa import Asset, Node, collection, external, task
+from aigfs.drivers.inference import AIGFSInference
+from iotaa import Asset, Node, external, task
 
 type CycleT = datetime | str
 
@@ -31,11 +32,11 @@ def config(cycle_: CycleT) -> Iterator:
     setup.set_up_rundir(c, workflow=None, prefix=name)
 
 
-@collection
-def cycle(cyclestr: str) -> Iterator:
-    cycle_ = _dt(cyclestr)
-    yield "Cycle %s" % _dt(cycle_)
-    yield post()
+# @collection
+# def cycle(cyclestr: str) -> Iterator:
+#     cycle_ = _dt(cyclestr)
+#     yield "Cycle %s" % _dt(cycle_)
+#     yield post()
 
 
 @task
@@ -43,31 +44,33 @@ def forecast(cycle_: CycleT) -> Iterator:
     step = cast(FrameType, inspect.currentframe()).f_code.co_name
     cycle_, taskname = _dt_taskname(cycle_, step)
     yield taskname
-    # fn = "aigfs.t%sz.ic.nc" % _hh(cycle_)
-    # path = _cycledir(cycle_) / step / fn
-    # yield Asset(path, path.is_file)
-    yield _timely(cycle_, AIGFSInference, step)
+    yield Asset("foo", lambda: False)  # PM FIXME
+    yield _timely(cycle_, AIGFSInference, step, prep)
 
 
-@task
-def post(cycle_: CycleT) -> Iterator:
-    cycle_ = _dt(cycle_)
-    yield "Cycle %s post" % cycle_
-    path = Path("post")
-    yield Asset(path, path.is_file)
-    yield forecast(cycle_)
-    path.touch()
+# @task
+# def post(cycle_: CycleT) -> Iterator:
+#     cycle_ = _dt(cycle_)
+#     yield "Cycle %s post" % cycle_
+#     path = Path("post")
+#     yield Asset(path, path.is_file)
+#     yield forecast(cycle_)
+#     path.touch()
 
 
 @task
 def prep(cycle_: CycleT) -> Iterator:
     step = cast(FrameType, inspect.currentframe()).f_code.co_name
-    cycle_, taskname = _dt_taskname(cycle_, step)
+    dt, taskname = _dt_taskname(cycle_, step)
     yield taskname
-    fn = "aigfs.t%sz.ic.nc" % _hh(cycle_)
-    path = _cycledir(cycle_) / step / fn
+    path = _cycledir(dt) / step / ("aigfs.t%sz.ic.nc" % _hh(dt))
     yield Asset(path, path.is_file)
-    yield _timely(cycle_, AIGFSICs, step)
+    if (timegate := _timegate(dt)).ready:
+        schema = _schema(AIGFSICs)
+        driver = AIGFSICs(cycle=dt, config=CFG, key_path=[step], schema_file=schema)
+        yield driver.run()
+    else:
+        yield timegate
 
 
 # Private tasks:
@@ -106,8 +109,8 @@ def _schema(class_: type) -> Path:
     return Path(inspect.getfile(class_)).with_suffix(".jsonschema")
 
 
-def _timely(cycle_: datetime, class_: type, step: str) -> Node:
+def _timely(cycle_: datetime, class_: type, step: str, req: Callable | None = None) -> Node:
     if (timegate := _timegate(cycle_)).ready:
         driver = class_(cycle=cycle_, config=CFG, key_path=[step], schema_file=_schema(class_))
-        return cast(Node, driver.run())
+        return cast(Node, driver.run([req] if req else None))
     return timegate

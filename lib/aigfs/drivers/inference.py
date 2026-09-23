@@ -19,7 +19,7 @@ from graphcast import (  # type: ignore[import-untyped]
     normalization,
     rollout,
 )
-from iotaa import Asset, collection, task
+from iotaa import Asset, Node, collection, task
 from uwtools.drivers.driver import DriverCycleBased
 
 from aigfs.drivers.utils.grib2writer import Grib2Writer
@@ -107,7 +107,7 @@ class AIGFSInference(DriverCycleBased):
             weights.append(checkpoint.load(f, graphcast.CheckPoint))
 
     @task
-    def predictions(self) -> Iterator:
+    def predictions(self, reqs: list[Node] | None = None) -> Iterator:
         """
         Predictions.
         """
@@ -118,7 +118,7 @@ class AIGFSInference(DriverCycleBased):
         itfs = self.inputs_targets_forcings()
         model_weights = self.model_weights()
         norm_stats = self.normalization_stats()
-        yield [ics, itfs, model_weights, norm_stats]
+        yield [ics, itfs, model_weights, norm_stats, *(reqs or [])]
         ds = _clean_ics(ics.ref)
         converter = Grib2Writer(
             start_date=pd.to_datetime(ds.datetime.to_numpy()[0][-1]),
