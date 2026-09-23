@@ -60,10 +60,9 @@ def post(cycle_: CycleT) -> Iterator:
 
 @task
 def prep(cycle_: CycleT) -> Iterator:
-    cycle_ = _dt(cycle_)
     step = cast(FrameType, inspect.currentframe()).f_code.co_name
-    name = "Cycle %s %s" % (cycle_, step)
-    yield name
+    cycle_, taskname = _dt_taskname(cycle_, step)
+    yield taskname
     fn = "aigfs.t%sz.ic.nc" % _hh(cycle_)
     path = _cycledir(cycle_) / step / fn
     yield Asset(path, path.is_file)
@@ -75,12 +74,9 @@ def prep(cycle_: CycleT) -> Iterator:
 
 @external
 def _timegate(cycle_: datetime) -> Iterator:
-    offset = timedelta(hours=3, minutes=35)
-    cutoff = cycle_ + offset
-    yield from [
-        "UTC > %s" % cutoff.replace(tzinfo=None),
-        Asset(None, lambda: datetime.now(UTC) > cutoff),
-    ]
+    cutoff = cycle_ + timedelta(hours=3, minutes=35)
+    yield "UTC > %s" % cutoff.replace(tzinfo=None)
+    yield Asset(None, lambda: datetime.now(UTC) > cutoff)
 
 
 # Private helpers:
@@ -94,6 +90,11 @@ def _dt(cycle_: CycleT) -> datetime:
     if isinstance(cycle_, str):
         return datetime.fromisoformat(cycle_).replace(tzinfo=timezone.utc)
     return cycle_
+
+
+def _dt_taskname(cycle_: CycleT, step: str) -> tuple[datetime, str]:
+    cycle_ = _dt(cycle_)
+    return cycle_, "%s %s" % (cycle_.strftime("%Y%m%d %HZ"), step)
 
 
 def _hh(cycle_: datetime) -> str:
