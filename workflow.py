@@ -46,12 +46,11 @@ def forecast(cycle_: CycleT) -> Iterator:
     yield taskname
     path = Path("foo")
     yield Asset(path, path.is_file)
-    if (timegate := _timegate(dt)).ready:
-        schema = _schema(AIGFSInference)
-        driver = AIGFSInference(cycle=dt, config=CFG, key_path=[step], schema_file=schema)
-        yield driver.predictions(reqs=[prep(dt)])
-    else:
-        yield timegate
+    prep_ = prep(dt)
+    yield [_timegate(dt), prep_]
+    schema = _schema(AIGFSInference)
+    driver = AIGFSInference(cycle=dt, config=CFG, key_path=[step], schema_file=schema)
+    driver.run(iotaa={"root": True})
 
 
 # @task
@@ -72,8 +71,9 @@ def prep(cycle_: CycleT) -> Iterator:
     path = _cycledir(dt) / step / ("aigfs.t%sz.ic.nc" % dt.strftime("%H"))
     yield Asset(path, path.is_file)
     yield [_timegate(dt), config(dt)]
-    driver = AIGFSICs(cycle=dt, config=CFG, key_path=[step], schema_file=_schema(AIGFSICs))
-    driver.merged_netcdf_files(iotaa={"root": True})
+    schema = _schema(AIGFSICs)
+    driver = AIGFSICs(cycle=dt, config=CFG, key_path=[step], schema_file=schema)
+    driver.run(iotaa={"root": True})
 
 
 # Private tasks:
