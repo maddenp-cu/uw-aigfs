@@ -44,12 +44,11 @@ def forecast(cycle_: CycleT) -> Iterator:
     step = cast(FrameType, inspect.currentframe()).f_code.co_name
     dt, taskname = _dt_taskname(cycle_, step)
     yield taskname
+    class_ = AIGFSInference
+    driver = class_(cycle=dt, config=CFG, key_path=[step], schema_file=_schema(class_))
     path = Path("foo")
     yield Asset(path, path.is_file)
-    prep_ = prep(dt)
-    yield [_timegate(dt), prep_]
-    schema = _schema(AIGFSInference)
-    driver = AIGFSInference(cycle=dt, config=CFG, key_path=[step], schema_file=schema)
+    yield prep(dt)
     driver.run(iotaa={"root": True})
 
 
@@ -68,11 +67,11 @@ def prep(cycle_: CycleT) -> Iterator:
     step = cast(FrameType, inspect.currentframe()).f_code.co_name
     dt, taskname = _dt_taskname(cycle_, step)
     yield taskname
-    path = _cycledir(dt) / step / ("aigfs.t%sz.ic.nc" % dt.strftime("%H"))
+    class_ = AIGFSICs
+    driver = class_(cycle=dt, config=CFG, key_path=[step], schema_file=_schema(class_))
+    path = driver.output["ics"]
     yield Asset(path, path.is_file)
-    yield [_timegate(dt), config(dt)]
-    schema = _schema(AIGFSICs)
-    driver = AIGFSICs(cycle=dt, config=CFG, key_path=[step], schema_file=schema)
+    yield [_timegate(dt)]
     driver.run(iotaa={"root": True})
 
 

@@ -25,7 +25,7 @@ class AIGFSICs(DriverCycleBased, FileStager):
         """
         A netCDF file comprising multiple processed intermediate netCDF files.
         """
-        path = self.rundir / f"aigfs.t{self.cycle.strftime('%H')}z.ic.nc"
+        path = self.output["ics"]
         yield f"Merged netCDF file {path}"
         yield Asset(path, path.is_file)
         reqs = self.ncfiles()
@@ -129,6 +129,10 @@ class AIGFSICs(DriverCycleBased, FileStager):
         """
         return STR.aigfs_ics
 
+    @property
+    def output(self) -> dict[str, Path]:
+        return {"ics": self.rundir / f"aigfs.t{self.cycle.strftime('%H')}z.ic.nc"}
+
     # Private helper methods
 
     @cached_property
@@ -151,7 +155,7 @@ class AIGFSICs(DriverCycleBased, FileStager):
                 for path in filter(lambda x: x.name.endswith(suffix), paths):
                     if (load_once := cfg.get(STR.load_once)) is False:
                         continue
-                    logging.info("Loading %s", var)
+                    logging.debug("Loading %s", var)
                     if not (m := re.match(rf"^.*\.t(\d\d)z{suffix}$", path.name)):
                         msg = "GRIB files don't have names expected by this driver!"
                         logging.error(msg)
