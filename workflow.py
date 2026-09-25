@@ -71,13 +71,9 @@ def prep(cycle_: CycleT) -> Iterator:
     yield taskname
     path = _cycledir(dt) / step / ("aigfs.t%sz.ic.nc" % dt.strftime("%H"))
     yield Asset(path, path.is_file)
-    timegate = _timegate(dt)
-    if timegate.ready:
-        schema = _schema(AIGFSICs)
-        driver = AIGFSICs(cycle=dt, config=CFG, key_path=[step], schema_file=schema)
-        yield driver.merged_netcdf_files()
-    else:
-        yield timegate
+    yield [_timegate(dt), config(dt)]
+    driver = AIGFSICs(cycle=dt, config=CFG, key_path=[step], schema_file=_schema(AIGFSICs))
+    driver.merged_netcdf_files(iotaa={"root": True})
 
 
 # Private tasks:
