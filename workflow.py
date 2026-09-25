@@ -22,7 +22,7 @@ CMD = f"podman run -v .:{DIR} ghcr.io/maddenp-cu/aigfs:latest run cmd"
 @task
 def config(cycle_: CycleT) -> Iterator:
     step = cast(FrameType, inspect.currentframe()).f_code.co_name
-    dt, taskname = _dt_taskname(cycle_, step)
+    _, taskname = _dt_taskname(cycle_, step)
     yield taskname
     yield Asset(CFG, CFG.is_file)
     yield None
