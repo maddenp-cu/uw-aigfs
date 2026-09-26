@@ -46,8 +46,7 @@ def forecast(cycle_: CycleT) -> Iterator:
     yield taskname
     class_ = AIGFSInference
     driver = class_(cycle=dt, config=CFG, key_path=[step], schema_file=_schema(class_))
-    path = Path("foo")
-    yield Asset(path, path.is_file)
+    yield [Asset(path, path.is_file) for path in driver.output["forecasts"]]
     yield prep(dt)
     driver.run(iotaa={"root": True})
 

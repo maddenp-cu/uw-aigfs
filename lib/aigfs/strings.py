@@ -49,6 +49,7 @@ class _STR(_ValsMatchKeys):
     files_to_link: str = _
     forecast_freq: str = _
     forecast_length: str = _
+    forecasts: str = _
     geopotential_at_surface: str = _
     geopotential: str = _
     grib_in_config: str = _

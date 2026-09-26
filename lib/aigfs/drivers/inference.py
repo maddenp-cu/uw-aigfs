@@ -112,8 +112,7 @@ class AIGFSInference(DriverCycleBased):
         Predictions.
         """
         yield "predictions"
-        path = self.rundir / STR.aigfs_done
-        yield Asset(path, path.is_file)
+        yield [Asset(path, path.is_file) for path in self.output[STR.forecasts]]
         ics = self.initial_conditions()
         itfs = self.inputs_targets_forcings()
         model_weights = self.model_weights()
@@ -149,7 +148,6 @@ class AIGFSInference(DriverCycleBased):
             targets_template=targets * np.nan,
             forcings=forcings,
         )
-        path.touch()
 
     @collection
     def provisioned_rundir(self) -> Iterator:
@@ -175,6 +173,17 @@ class AIGFSInference(DriverCycleBased):
         Returns the name of this driver.
         """
         return STR.aigfs_inference
+
+    @property
+    def output(self) -> dict[str, list[Path]]:
+        delta = self.config["forecast_freq"]
+        template = "aigfs.t%sz.%s.f%03d.grib2"
+        paths = [
+            self.rundir / (template % (self.cycle.strftime("%H"), kind, leadtime))
+            for kind in ("pres", "sfc")
+            for leadtime in range(0, self.config["forecast_length"] + delta, delta)
+        ]
+        return {STR.forecasts: paths}
 
     # Private helper methods
 
