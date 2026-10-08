@@ -31,6 +31,9 @@ use_uwtools_logger()
 
 @task
 def config() -> Iterator:
+    """
+    The composed AIGFS config YAML file.
+    """
     taskname = "config"
     yield taskname
     yield Asset(CFG, CFG.is_file)
@@ -43,6 +46,9 @@ def config() -> Iterator:
 
 @task
 def forecast(cycle_: CycleT) -> Iterator:
+    """
+    Execution of the inference driver for one cycle.
+    """
     dt, taskname = _dt_taskname(cycle_, STR.forecast)
     yield taskname
     cls = AIGFSInference
@@ -58,6 +64,9 @@ def forecast(cycle_: CycleT) -> Iterator:
 
 @collection
 def cycle(cycle_: CycleT) -> Iterator:
+    """
+    A complete prep > forecast > post execution for one cycle.
+    """
     dt, taskname = _dt_taskname(cycle_, "cycle")
     yield taskname
     yield post(dt)
@@ -65,6 +74,9 @@ def cycle(cycle_: CycleT) -> Iterator:
 
 @collection
 def cycles() -> Iterator:
+    """
+    Execution of all defined cycles.
+    """
 
     # Process leading-edge cycles first.
 
@@ -80,6 +92,9 @@ def cycles() -> Iterator:
 
 @collection
 def post(cycle_: CycleT) -> Iterator:
+    """
+    Execution of the post driver for one cycle.
+    """
 
     # Instantiate the inference driver and use its declared output to define the one-per-leadtime
     # post tasks required to post-process the full forecast cycle. Each leadtime involves two GRIB
@@ -95,6 +110,9 @@ def post(cycle_: CycleT) -> Iterator:
 
 @task
 def prep(cycle_: CycleT) -> Iterator:
+    """
+    Execution of the prep driver for one cycle.
+    """
     dt, taskname = _dt_taskname(cycle_, STR.prep)
     yield taskname
     cls = AIGFSICs

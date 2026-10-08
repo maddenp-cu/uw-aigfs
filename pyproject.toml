@@ -38,6 +38,7 @@ ignore = [
   "D104",    # undocumented-public-package
   "D107",    # undocumented-public-init
   "D200",    # unnecessary-multiline-docstring
+  "D202",    # blank-line-after-function
   "D203",    # incorrect-blank-line-before-class
   "D212",    # multi-line-summary-first-line
   "D401",    # non-imperative-mood
