@@ -5,10 +5,10 @@ import os
 import sys
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta, timezone
-from functools import cache
 from pathlib import Path
 
 from iotaa import Asset, collection, external, task
+from uwtools.api.config import realize_to_dict
 from uwtools.api.driver import Driver
 from uwtools.api.logging import use_uwtools_logger
 from uwtools.api.utils import run_shell_cmd
@@ -30,8 +30,8 @@ use_uwtools_logger()
 
 
 @task
-def config(cycle_: CycleT) -> Iterator:
-    _, taskname = _dt_taskname(cycle_, "config")
+def config() -> Iterator:
+    taskname = "config"
     yield taskname
     yield Asset(CFG, CFG.is_file)
     yield None
@@ -54,6 +54,28 @@ def forecast(cycle_: CycleT) -> Iterator:
     prefix = "srun --exclusive --nodes=1 --time=30"
     cmd = _cmd(driver, key_path, dt, prefix=prefix)
     _execute(cmd, driver.rundir, taskname, assets)
+
+
+@collection
+def cycle(cycle_: CycleT) -> Iterator:
+    dt, taskname = _dt_taskname(cycle_, "cycle")
+    yield taskname
+    yield post(dt)
+
+
+@collection
+def cycles() -> Iterator:
+
+    # Process leading-edge cycles first.
+
+    yield "cycles"
+    app = realize_to_dict(CFG)["app"]
+    dts = []
+    dt = app["last_cycle"]
+    while dt >= app["first_cycle"]:
+        dts.append(dt)
+        dt -= app["cycle_freq"]
+    yield [cycle(dt) for dt in dts]
 
 
 @collection
@@ -135,7 +157,7 @@ def _post_one_leadtime(dt: datetime, pres: Path, sfc: Path) -> Iterator:
 def _timegate(dt: datetime) -> Iterator:
     cutoff = dt + timedelta(hours=3, minutes=35)
     yield "UTC > %s" % cutoff.replace(tzinfo=None)
-    yield Asset(None, lambda: datetime.now(UTC) > cutoff)
+    yield Asset(None, lambda: datetime.now(UTC) > _utc(cutoff))
 
 
 # Private helpers:
@@ -165,11 +187,7 @@ def _cmd(
 
 
 def _dt_taskname(cycle_: CycleT, step: str) -> tuple[datetime, str]:
-    dt = (
-        datetime.fromisoformat(cycle_).replace(tzinfo=timezone.utc)
-        if isinstance(cycle_, str)
-        else cycle_
-    )
+    dt = _utc(datetime.fromisoformat(cycle_)) if isinstance(cycle_, str) else cycle_
     return dt, "%s %s" % (dt.strftime("%Y%m%d %HZ"), step)
 
 
@@ -180,8 +198,9 @@ def _execute(cmd: str, rundir: Path, taskname: str, assets: list[Asset]) -> None
     # the process exits.
 
     def log(proc):
+        logger = _passthrough_logger()
         for line in proc.stdout:
-            _passthrough_logger().info(line.rstrip("\r\n"))
+            logger.info(line.rstrip("\r\n"))
 
     rundir.mkdir(parents=True, exist_ok=True)
     lockfile = rundir / (".lock-%s" % taskname.replace(" ", "-"))
@@ -205,16 +224,22 @@ def _fff(gribfile: Path) -> str:
     return gribfile.name.split(".")[3][1:]
 
 
-@cache
 def _passthrough_logger() -> logging.Logger:
     logger = logging.getLogger("passthrough")
     logger.setLevel(logging.INFO)
     logger.propagate = False
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(logging.Formatter("%(message)s"))
-    logger.addHandler(handler)
+    handler = next((h for h in logger.handlers if isinstance(h, logging.StreamHandler)), None)
+    if handler is None:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        logger.addHandler(handler)
+    handler.stream = sys.stderr
     return logger
 
 
 def _schema(cls: type) -> Path:
     return Path(inspect.getfile(cls)).with_suffix(".jsonschema")
+
+
+def _utc(dt: datetime) -> datetime:
+    return dt.replace(tzinfo=timezone.utc)

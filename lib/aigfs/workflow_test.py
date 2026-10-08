@@ -56,26 +56,56 @@ def driver(output: dict, rundir: Path) -> Mock:
 # Tests
 
 
-def test_workflow_config__exists(cfg, cycle, touch):
+def test_workflow_config__exists(cfg, touch):
     touch(cfg)
     with patch.object(workflow, "setup") as setup:
-        node = workflow.config(cycle)
+        node = workflow.config()
     assert node.ready
-    assert node.taskname == "20251001 18Z config"
+    assert node.taskname == "config"
     setup.compose_configs.assert_not_called()
 
 
 @mark.usefixtures("cfg")
 def test_workflow_config__missing(tmp_path):
     with patch.object(workflow, "setup") as setup:
-        node = workflow.config("2025-10-01T18")
+        node = workflow.config()
     assert not node.ready
     setup.compose_configs.assert_called_once_with(
         workflow=None, platform="oci", user_config_files=[tmp_path / "user.yaml"]
     )
     c = setup.compose_configs.return_value
     setup.validate.assert_called_once_with(c)
-    setup.set_up_rundir.assert_called_once_with(c, workflow=None, prefix="20251001 18Z config")
+    setup.set_up_rundir.assert_called_once_with(c, workflow=None, prefix="config")
+
+
+@mark.parametrize("ready", [True, False])
+def test_workflow_cycle(atask, cycle, ready):
+    with patch.object(workflow, STR.post, Mock(wraps=lambda _: atask(ready))) as post:
+        node = workflow.cycle(cycle)
+    assert node.ready is ready
+    assert node.taskname == "20251001 18Z cycle"
+    post.assert_called_once_with(cycle)
+
+
+@mark.parametrize("ready", [True, False])
+def test_workflow_cycles(atask, cycle, ready):
+    app = {
+        "first_cycle": cycle,
+        "last_cycle": cycle + timedelta(hours=12),
+        "cycle_freq": timedelta(hours=6),
+    }
+    with (
+        patch.object(workflow, "realize_to_dict", return_value={"app": app}),
+        patch.object(workflow, "cycle", Mock(wraps=lambda _: atask(ready))) as cycle_,
+    ):
+        node = workflow.cycles()
+    assert node.ready is ready
+    assert node.taskname == "cycles"
+    assert [c.args for c in cycle_.call_args_list] == [
+        (cycle + timedelta(hours=12),),  # leading-edge first
+        (cycle + timedelta(hours=6),),
+        (cycle,),
+    ]
 
 
 @mark.parametrize("ready", [True, False])
@@ -222,18 +252,17 @@ def test_workflow__dt_taskname(cycle):
 
 
 def test_workflow__execute(capsys, lockkit):
-    obj, assets, lockfile, output = lockkit
-
     def run_cmd(*_args, **kwargs):
         kwargs["callback"](Mock(stdout=StringIO("first line\nsecond line\n")))
         output.touch()
 
+    obj, assets, lockfile, output = lockkit
     with patch.object(workflow, "run_shell_cmd", side_effect=run_cmd) as cmd:
         workflow._execute("/bin/true", obj.rundir, TASKNAME, assets)
     cmd.assert_called_once_with("/bin/true", callback=ANY, cwd=obj.rundir, taskname=TASKNAME)
     assert lockfile.is_file()
     assert output.is_file()
-    assert capsys.readouterr().out == "first line\nsecond line\n"
+    assert capsys.readouterr().err == "first line\nsecond line\n"
 
 
 def test_workflow__execute__ready_elsewhere(logcap, lockkit):
@@ -271,7 +300,25 @@ def test_workflow__execute__lock_released(lockkit):
         fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)  # would raise if still held
 
 
+def test_workflow__fff():
+    assert workflow._fff(Path("/path/to/aigfs.t00z.pres.f018.grib2")) == "018"
+
+
+def test_workflow__passthrough_logger(capsys):
+    logger = workflow._passthrough_logger()
+    logger.info("some log message")
+    assert capsys.readouterr().err.strip() == "some log message"
+    assert workflow._passthrough_logger() is logger  # logging module reuses loggers
+
+
 def test_workflow__schema():
     path = workflow._schema(AIGFSInference)
     assert path.name == "inference.jsonschema"
     assert path.is_file()
+
+
+def test_workflow__utc():
+    dt = datetime(1970, 1, 1)  # noqa: DTZ001
+    assert dt.tzinfo is None
+    dt = workflow._utc(dt)
+    assert dt.tzinfo is UTC
