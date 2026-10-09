@@ -21,7 +21,7 @@ INSTRUCTIONS
 - [ ] Bug fix (corrects a known issue)
 - [ ] Code maintenance (refactoring, etc. without behavior change)
 - [ ] Documentation
-- [ ] Enhancement (adds new functionality)
+- [ ] Enhancement (improves or adds new functionality)
 - [ ] Tooling (CI, code-quality, packaging, revision-control, etc.)
 
 **Impact**
@@ -37,4 +37,4 @@ INSTRUCTIONS
 
 - [ ] I have added myself and any co-authors to the PR's _Assignees_ list.
 - [ ] I have reviewed the documentation and have made any updates necessitated by this change.
-- [ ] Where helpful, I have written comments in this PR's Files changed view to assist reviewers.
+- [ ] Where helpful, I have written comments in this PR's _Files changed_ view to assist reviewers.

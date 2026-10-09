@@ -92,10 +92,10 @@ class App(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    cycle_freq: timedelta
-    first_cycle: datetime
+    cycle_freq: timedelta | None = None
+    first_cycle: datetime | None = None
     home: Path
-    last_cycle: datetime
+    last_cycle: datetime | None = None
     modeldir: Path
     platform: Platform
     rundir: Path
@@ -104,19 +104,27 @@ class App(BaseModel):
     @field_validator("cycle_freq")
     @classmethod
     def validate_cycle_freq(cls, val: timedelta) -> timedelta:
-        if val.total_seconds() <= 0:
-            msg = "cycle_freq must be greater than 0"
-            raise ValueError(msg)
-        if val.total_seconds() % (6 * 3600) != 0:
-            msg = "cycle_freq must be a multiple of 6"
-            raise ValueError(msg)
+        if val is not None:
+            if val.total_seconds() <= 0:
+                msg = "cycle_freq must be greater than 0"
+                raise ValueError(msg)
+            if val.total_seconds() % (6 * 3600) != 0:
+                msg = "cycle_freq must be a multiple of 6"
+                raise ValueError(msg)
         return val
 
     @model_validator(mode="after")
     def first_and_last_cycle(self) -> "App":
-        if self.last_cycle < self.first_cycle:
-            msg = "last_cycle cannot precede first_cycle"
+        if (self.first_cycle is not None) ^ (self.last_cycle is not None):
+            msg = "first_cycle and last_cycle must both be defined if either is defined"
             raise ValueError(msg)
+        if self.first_cycle is not None and self.last_cycle is not None:
+            if self.last_cycle < self.first_cycle:
+                msg = "last_cycle cannot precede first_cycle"
+                raise ValueError(msg)
+            if self.cycle_freq is None:
+                msg = "cycle_freq must be defined when first_cycle and last_cycle are defined"
+                raise ValueError(msg)
         return self
 
 
@@ -134,6 +142,20 @@ class Config(BaseModel):
     prep: dict
     user: dict | None = None
     workflow: dict | None = None
+
+    @model_validator(mode="after")
+    def cycle_range_vs_workflow(self) -> "Config":
+        workflow = self.ecflow is not None or self.workflow is not None
+        cycle_range = (
+            self.app.cycle_freq is not None
+            and self.app.first_cycle is not None
+            and self.app.last_cycle is not None
+        )
+        if workflow and not cycle_range:
+            engine = "ecflow" if self.ecflow is not None else "workflow"
+            msg = f"cycle_freq, first_cycle, last_cycle must be defined when {engine} is defined"
+            raise ValueError(msg)
+        return self
 
 
 # Public functions
