@@ -207,7 +207,7 @@ def test_validation_Config__workflow_requires_cycle_range(args_config, engine, o
     args_config[other_engine] = None
     # While it would be an error for any of the following three cycle-range values to be None, we
     # only need to test the case where ALL THREE are None because all the other cases are covered
-    # by different validation rules and their assocaited tests.
+    # by different validation rules and their associated tests.
     args_config["app"]["cycle_freq"] = None
     args_config["app"]["first_cycle"] = None
     args_config["app"]["last_cycle"] = None
