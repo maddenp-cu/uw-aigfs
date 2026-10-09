@@ -1,7 +1,4 @@
 app:
-  cycle_freq: !timedelta USER-MUST-OVERRIDE
-  first_cycle: !datetime USER-MUST-OVERRIDE
-  last_cycle: !datetime USER-MUST-OVERRIDE
   modeldir: /opt/aigfs/model
   rundir: /run/aigfs
 forecast:
