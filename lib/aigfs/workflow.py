@@ -21,8 +21,8 @@ from aigfs.strings import STR
 
 type CycleT = datetime | str
 
-PWD = Path(os.environ["PWD"])
-CFG = PWD / STR.aigfs_yaml
+APPDIR = Path(os.environ["PWD"])
+CONFIG = APPDIR / STR.aigfs_yaml
 
 use_uwtools_logger()
 
@@ -36,9 +36,9 @@ def config() -> Iterator:
     """
     taskname = "config"
     yield taskname
-    yield Asset(CFG, CFG.is_file)
+    yield Asset(CONFIG, CONFIG.is_file)
     yield None
-    user = PWD / "user.yaml"
+    user = APPDIR / "user.yaml"
     c = setup.compose_configs(workflow=None, platform=STR.oci, user_config_files=[user])
     setup.validate(c)
     setup.set_up_rundir(c, workflow=None, prefix=taskname)
@@ -53,7 +53,7 @@ def forecast(cycle_: CycleT) -> Iterator:
     yield taskname
     cls = AIGFSInference
     key_path: list = [STR.forecast]
-    driver = cls(cycle=dt, config=CFG, key_path=key_path, schema_file=_schema(cls))
+    driver = cls(cycle=dt, config=CONFIG, key_path=key_path, schema_file=_schema(cls))
     assets = [Asset(path, path.is_file) for path in driver.output[STR.forecast]]
     yield assets
     yield prep(dt)
@@ -81,7 +81,7 @@ def cycles() -> Iterator:
     # Process leading-edge cycles first.
 
     yield "cycles"
-    app = realize_to_dict(CFG)["app"]
+    app = realize_to_dict(CONFIG)["app"]
     dts = []
     dt = app["last_cycle"]
     while dt >= app["first_cycle"]:
@@ -103,7 +103,7 @@ def post(cycle_: CycleT) -> Iterator:
     dt, taskname = _dt_taskname(cycle_, STR.post)
     yield taskname
     cls = AIGFSInference
-    inference = cls(cycle=dt, config=CFG, key_path=[STR.forecast], schema_file=_schema(cls))
+    inference = cls(cycle=dt, config=CONFIG, key_path=[STR.forecast], schema_file=_schema(cls))
     paths = iter(sorted(sorted(inference.output[STR.forecast]), key=_fff))
     yield [_post_one_leadtime(dt, pres, sfc) for pres, sfc in zip(paths, paths, strict=False)]
 
@@ -117,13 +117,30 @@ def prep(cycle_: CycleT) -> Iterator:
     yield taskname
     cls = AIGFSICs
     key_path: list = [STR.prep]
-    driver = cls(cycle=dt, config=CFG, key_path=key_path, schema_file=_schema(cls))
+    driver = cls(cycle=dt, config=CONFIG, key_path=key_path, schema_file=_schema(cls))
     path = driver.output[STR.ics]
     assets = [Asset(path, path.is_file)]
     yield assets
     yield _timegate(dt)
     cmd = _cmd(driver, key_path, dt)
     _execute(cmd, driver.rundir, taskname, assets)
+
+
+@collection
+def realtime() -> Iterator:
+    """
+    Execution of a rolling realtime window of cycles.
+    """
+
+    # Process leading-edge cycles first.
+
+    c = realize_to_dict(CONFIG)
+    cycle_freq = c["app"]["cycle_freq"]
+    window_size = c["user"]["window_size"]
+    yield f"{window_size} realtime cycles"
+    ts = datetime.now(UTC).timestamp()
+    latest = datetime.fromtimestamp(ts - (ts % cycle_freq.total_seconds()), UTC)
+    yield [cycle(latest - (n * cycle_freq)) for n in range(window_size)]
 
 
 # Private tasks:
@@ -160,7 +177,7 @@ def _post_one_leadtime(dt: datetime, pres: Path, sfc: Path) -> Iterator:
     key_path: list = [STR.post]
     leadtime = timedelta(hours=int(fff))
     driver = cls(
-        cycle=dt, leadtime=leadtime, config=CFG, key_path=key_path, schema_file=_schema(cls)
+        cycle=dt, leadtime=leadtime, config=CONFIG, key_path=key_path, schema_file=_schema(cls)
     )
     output = driver.output
     paths = output.get(STR.delivered, output[STR.idx])
@@ -190,12 +207,12 @@ def _cmd(
 ) -> str:
     cmd = [
         prefix,
-        f"{PWD}/bin/run cmd",
+        f"{APPDIR}/bin/run cmd",
         "uw execute",
         "--module %s" % driver.__module__,
         "--classname %s" % driver.__class__.__name__,
         "--task run",
-        "--config %s" % CFG,
+        "--config %s" % CONFIG,
         "--key-path %s" % ".".join(key_path),
         "--cycle %s" % dt.strftime("%Y%m%dT%H"),
     ]

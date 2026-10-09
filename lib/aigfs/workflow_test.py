@@ -17,7 +17,7 @@ from aigfs.strings import STR
 @fixture
 def cfg(tmp_path):
     path = tmp_path / "aigfs.yaml"
-    with patch.object(workflow, "CFG", path), patch.object(workflow, "PWD", tmp_path):
+    with patch.object(workflow, "CONFIG", path), patch.object(workflow, "APPDIR", tmp_path):
         yield path
 
 
