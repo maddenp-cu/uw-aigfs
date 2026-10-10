@@ -36,12 +36,12 @@ use_uwtools_logger()
 
 class AppCycles(App_):
     cycle_freq: timedelta
+    first_cycle: datetime
+    last_cycle: datetime
 
 
 class AppRealtime(App_):
     cycle_freq: timedelta
-    first_cycle: datetime
-    last_cycle: datetime
 
 
 class User(BaseModel):

@@ -103,25 +103,25 @@ def test_workflow_AppCycles__cycle_freq_timedelta(with_set, workflow_config):
     assert e.value.errors()[0]["loc"] == ("cycle_freq",)
 
 
+@mark.parametrize("field", ["first_cycle", "last_cycle"])
+def test_workflow_AppCycles__cycle_required(with_del, workflow_config, field):
+    with raises(ValidationError) as e:
+        workflow.AppCycles.model_validate(with_del(workflow_config["app"], field))
+    assert e.value.errors()[0]["loc"] == (field,)
+
+
+@mark.parametrize("field", ["first_cycle", "last_cycle"])
+def test_workflow_AppCycles__cycle_datetime(with_set, workflow_config, field):
+    app = with_set(workflow_config["app"], "not-a-datetime", field)
+    with raises(ValidationError) as e:
+        workflow.AppCycles.model_validate(app)
+    assert e.value.errors()[0]["loc"] == (field,)
+
+
 def test_workflow_AppRealtime(workflow_config):
     app = workflow.AppRealtime.model_validate(workflow_config["app"])
     assert app.first_cycle == workflow_config["app"]["first_cycle"]
     assert app.last_cycle == workflow_config["app"]["last_cycle"]
-
-
-@mark.parametrize("field", ["first_cycle", "last_cycle"])
-def test_workflow_AppRealtime__required(with_del, workflow_config, field):
-    with raises(ValidationError) as e:
-        workflow.AppRealtime.model_validate(with_del(workflow_config["app"], field))
-    assert e.value.errors()[0]["loc"] == (field,)
-
-
-@mark.parametrize("field", ["first_cycle", "last_cycle"])
-def test_workflow_AppRealtime__datetime(with_set, workflow_config, field):
-    app = with_set(workflow_config["app"], "not-a-datetime", field)
-    with raises(ValidationError) as e:
-        workflow.AppRealtime.model_validate(app)
-    assert e.value.errors()[0]["loc"] == (field,)
 
 
 def test_workflow_User__optional_window_prune():
@@ -161,29 +161,38 @@ def test_workflow_ConfigCycles__bad_vals(workflow_config, user):
         workflow.ConfigCycles.model_validate(workflow_config)
 
 
-def test_workflow_ConfigRealtime(workflow_config):
+def test_workflow_ConfigRealtime(workflow_config, with_del):
     workflow_config["user"] = {"window_size": 3}
-    config = workflow.ConfigRealtime.model_validate(workflow_config)
+    config = workflow.ConfigRealtime.model_validate(
+        with_del(with_del(workflow_config, "app", "first_cycle"), "app", "last_cycle")
+    )
     assert isinstance(config.app, workflow.AppRealtime)
-    assert config.app.first_cycle == workflow_config["app"]["first_cycle"]
-    assert config.app.last_cycle == workflow_config["app"]["last_cycle"]
+    assert config.app.first_cycle is None
+    assert config.app.last_cycle is None
 
 
-@mark.parametrize("field", ["first_cycle", "last_cycle"])
-def test_workflow_ConfigRealtime__required(with_del, workflow_config, field):
+@mark.parametrize(
+    ("field", "model"),
+    [
+        ("first_cycle", workflow.ConfigCycles),
+        ("last_cycle", workflow.ConfigCycles),
+    ],
+)
+def test_workflow_Config__cycle_required(with_del, workflow_config, field, model):
     workflow_config["user"] = {"window_size": 3}
     config = with_del(workflow_config, "app", field)
     with raises(ValidationError) as e:
-        workflow.ConfigRealtime.model_validate(config)
+        model.model_validate(config)
     assert e.value.errors()[0]["loc"] == ("app", field)
 
 
+@mark.parametrize("model", [workflow.ConfigCycles, workflow.ConfigRealtime])
 @mark.parametrize("field", ["first_cycle", "last_cycle"])
-def test_workflow_ConfigRealtime__datetime(with_set, workflow_config, field):
+def test_workflow_Config__cycle_datetime(with_set, workflow_config, model, field):
     workflow_config["user"] = {"window_size": 3}
     config = with_set(workflow_config, "not-a-datetime", "app", field)
     with raises(ValidationError) as e:
-        workflow.ConfigRealtime.model_validate(config)
+        model.model_validate(config)
     assert e.value.errors()[0]["loc"] == ("app", field)
 
 
