@@ -5,7 +5,8 @@ from pathlib import Path
 from unittest.mock import ANY, Mock, patch
 
 from iotaa import Asset
-from pytest import fixture, mark
+from pydantic import ValidationError
+from pytest import fixture, mark, raises
 
 from aigfs import workflow
 from aigfs.drivers.inference import AIGFSInference
@@ -19,6 +20,35 @@ def cfg(tmp_path):
     path = tmp_path / "aigfs.yaml"
     with patch.object(workflow, "CONFIG", path), patch.object(workflow, "APPDIR", tmp_path):
         yield path
+
+
+@fixture
+def workflow_config(tmp_path):
+    return {
+        "app": {
+            "cycle_freq": timedelta(hours=12),
+            "first_cycle": datetime(2026, 1, 1, tzinfo=UTC),
+            "home": tmp_path,
+            "last_cycle": datetime(2026, 1, 31, tzinfo=UTC),
+            "modeldir": tmp_path,
+            "platform": {"name": "ursa"},
+            "rundir": tmp_path,
+            "time": {
+                "fff": "006",
+                "hh": "00",
+                "m1_hh": "18",
+                "m1_yyyymmdd": "20260826",
+                "m2_hh": "12",
+                "m2_yyyymmdd": "20260826",
+                "m6h": timedelta(hours=6),
+                "yyyymmdd": "20260827",
+            },
+        },
+        "forecast": {},
+        "post": {},
+        "prep": {},
+        "user": {},
+    }
 
 
 @fixture
@@ -54,6 +84,34 @@ def driver(output: dict, rundir: Path) -> Mock:
 
 
 # Tests
+
+
+def test_workflow_User__optional_window_prune():
+    user = workflow.User(window_size=3)
+    assert user.window_size == 3
+    assert user.window_prune is False
+
+
+def test_workflow_Config(workflow_config):
+    workflow_config["user"] = {
+        "extra_setting": ["ok"],
+        "window_prune": False,
+        "window_size": 3,
+    }
+    config = workflow.Config.model_validate(workflow_config)
+    assert config.user.model_dump() == workflow_config["user"]
+
+
+def test_workflow_Config__bad_no_user(with_del, workflow_config):
+    with raises(ValidationError):
+        workflow.Config.model_validate(with_del(workflow_config, "user"))
+
+
+@mark.parametrize("user", [{}, {"window_size": True}, {"window_size": 3, "window_prune": 1}])
+def test_workflow_Config__bad_vals(workflow_config, user):
+    workflow_config["user"] = user
+    with raises(ValidationError):
+        workflow.Config.model_validate(workflow_config)
 
 
 def test_workflow_config__exists(cfg, touch):
@@ -137,7 +195,7 @@ def test_workflow__config():
     expected: dict[str, dict[str, object]] = {"app": {}, "user": {}}
     with (
         patch.object(workflow, "realize_to_dict", return_value=expected) as realize,
-        patch.object(workflow, "validate") as validate,
+        patch.object(workflow.Config, "model_validate") as validate,
     ):
         workflow._config.cache_clear()
         try:

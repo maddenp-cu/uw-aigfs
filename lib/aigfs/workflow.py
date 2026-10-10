@@ -11,6 +11,7 @@ from pathlib import Path
 from shutil import rmtree
 
 from iotaa import Asset, collection, external, task
+from pydantic import BaseModel, ConfigDict
 from uwtools.api.config import realize_to_dict
 from uwtools.api.driver import Driver
 from uwtools.api.logging import use_uwtools_logger
@@ -21,7 +22,7 @@ from aigfs.drivers.ics import AIGFSICs
 from aigfs.drivers.inference import AIGFSInference
 from aigfs.drivers.post import AIGFSPost
 from aigfs.strings import STR
-from aigfs.validation import validate
+from aigfs.validation import Config as Config_
 
 type CycleT = datetime | str
 
@@ -29,6 +30,25 @@ APPDIR = Path(os.environ.get("APPDIR", os.environ["PWD"]))
 CONFIG = APPDIR / STR.aigfs_yaml
 
 use_uwtools_logger()
+
+
+class User(BaseModel):
+    """
+    Model for workflow-specific user configuration.
+    """
+
+    model_config = ConfigDict(extra="allow", strict=True)
+    window_prune: bool = False
+    window_size: int
+
+
+class Config(Config_):
+    """
+    AIGFS config with additional validation for the workflow user settings.
+    """
+
+    user: User  # type: ignore[assignment]
+
 
 # Public tasks:
 
@@ -235,7 +255,7 @@ def _cmd(
 @cache
 def _config() -> dict:
     c = realize_to_dict(CONFIG)
-    validate(c)
+    Config.model_validate(c)
     return c
 
 
