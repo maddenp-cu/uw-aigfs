@@ -34,29 +34,16 @@ use_uwtools_logger()
 
 
 class App(App_):
-    """
-    Workflow app configuration with a required cycle frequency.
-    """
-
     cycle_freq: timedelta
 
 
 class User(BaseModel):
-    """
-    Model for workflow-specific user configuration.
-    """
-
     model_config = ConfigDict(extra="allow", strict=True)
-
     window_prune: bool = False
     window_size: int
 
 
 class Config(Config_):
-    """
-    AIGFS config with workflow-specific app and user settings.
-    """
-
     app: App
     user: User  # type: ignore[assignment]
 
