@@ -95,7 +95,7 @@ def test_workflow_cycles(atask, cycle, ready):
         "cycle_freq": timedelta(hours=6),
     }
     with (
-        patch.object(workflow, "realize_to_dict", return_value={"app": app}),
+        patch.object(workflow, "_config", return_value={"app": app}),
         patch.object(workflow, "cycle", Mock(wraps=lambda _: atask(ready))) as cycle_,
     ):
         node = workflow.cycles()

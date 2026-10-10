@@ -6,6 +6,7 @@ import re
 import sys
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta, timezone
+from functools import cache
 from pathlib import Path
 from shutil import rmtree
 
@@ -20,6 +21,7 @@ from aigfs.drivers.ics import AIGFSICs
 from aigfs.drivers.inference import AIGFSInference
 from aigfs.drivers.post import AIGFSPost
 from aigfs.strings import STR
+from aigfs.validation import validate
 
 type CycleT = datetime | str
 
@@ -83,7 +85,7 @@ def cycles() -> Iterator:
     # Process leading-edge cycles first.
 
     yield "cycles"
-    app = realize_to_dict(CONFIG)["app"]
+    app = _config()["app"]
     dts = []
     dt = app["last_cycle"]
     while dt >= app["first_cycle"]:
@@ -137,7 +139,7 @@ def realtime() -> Iterator:
     # Optionally remove trailing-edge cycle directories, then process leading-edge cycles, latest
     # first.
 
-    c = realize_to_dict(CONFIG)
+    c = _config()
     window_size = c["user"]["window_size"]
     yield f"{window_size} realtime cycles"
     if c["user"].get("window_prune"):
@@ -228,6 +230,13 @@ def _cmd(
     if leadtime is not None:
         cmd.append("--leadtime %s" % int(leadtime.total_seconds() / 3600))
     return " ".join(cmd).strip()
+
+
+@cache
+def _config() -> dict:
+    c = realize_to_dict(CONFIG)
+    validate(c)
+    return c
 
 
 def _dt_taskname(cycle_: CycleT, step: str) -> tuple[datetime, str]:
