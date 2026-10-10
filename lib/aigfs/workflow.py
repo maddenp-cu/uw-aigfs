@@ -22,6 +22,7 @@ from aigfs.drivers.ics import AIGFSICs
 from aigfs.drivers.inference import AIGFSInference
 from aigfs.drivers.post import AIGFSPost
 from aigfs.strings import STR
+from aigfs.validation import App as App_
 from aigfs.validation import Config as Config_
 
 type CycleT = datetime | str
@@ -32,21 +33,31 @@ CONFIG = APPDIR / STR.aigfs_yaml
 use_uwtools_logger()
 
 
+class App(App_):
+    """
+    Workflow app configuration with a required cycle frequency.
+    """
+
+    cycle_freq: timedelta
+
+
 class User(BaseModel):
     """
     Model for workflow-specific user configuration.
     """
 
     model_config = ConfigDict(extra="allow", strict=True)
+
     window_prune: bool = False
     window_size: int
 
 
 class Config(Config_):
     """
-    AIGFS config with additional validation for the workflow user settings.
+    AIGFS config with workflow-specific app and user settings.
     """
 
+    app: App
     user: User  # type: ignore[assignment]
 
 

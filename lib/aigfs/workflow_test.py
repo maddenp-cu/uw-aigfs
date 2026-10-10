@@ -86,6 +86,23 @@ def driver(output: dict, rundir: Path) -> Mock:
 # Tests
 
 
+def test_workflow_App(workflow_config):
+    app = workflow.App.model_validate(workflow_config["app"])
+    assert app.cycle_freq == timedelta(hours=12)
+
+
+def test_workflow_App__cycle_freq_required(with_del, workflow_config):
+    with raises(ValidationError) as e:
+        workflow.App.model_validate(with_del(workflow_config["app"], "cycle_freq"))
+    assert e.value.errors()[0]["loc"] == ("cycle_freq",)
+
+
+def test_workflow_App__cycle_freq_timedelta(with_set, workflow_config):
+    with raises(ValidationError) as e:
+        workflow.App.model_validate(with_set(workflow_config["app"], None, "cycle_freq"))
+    assert e.value.errors()[0]["loc"] == ("cycle_freq",)
+
+
 def test_workflow_User__optional_window_prune():
     user = workflow.User(window_size=3)
     assert user.window_size == 3
@@ -99,7 +116,16 @@ def test_workflow_Config(workflow_config):
         "window_size": 3,
     }
     config = workflow.Config.model_validate(workflow_config)
+    assert isinstance(config.app, workflow.App)
     assert config.user.model_dump() == workflow_config["user"]
+
+
+def test_workflow_Config__cycle_freq_required(workflow_config):
+    workflow_config["app"].pop("cycle_freq")
+    workflow_config["user"] = {"window_size": 3}
+    with raises(ValidationError) as e:
+        workflow.Config.model_validate(workflow_config)
+    assert e.value.errors()[0]["loc"] == ("app", "cycle_freq")
 
 
 def test_workflow_Config__bad_no_user(with_del, workflow_config):
