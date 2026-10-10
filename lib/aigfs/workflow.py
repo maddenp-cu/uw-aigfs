@@ -2,10 +2,12 @@ import fcntl
 import inspect
 import logging
 import os
+import re
 import sys
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
+from shutil import rmtree
 
 from iotaa import Asset, collection, external, task
 from uwtools.api.config import realize_to_dict
@@ -132,13 +134,20 @@ def realtime() -> Iterator:
     Execution of a rolling realtime window of cycles.
     """
 
-    # Process leading-edge cycles first.
+    # Optionally remove trailing-edge cycle directories, then process leading-edge cycles, latest
+    # first.
 
     c = realize_to_dict(CONFIG)
-    cycle_freq = c["app"]["cycle_freq"]
     window_size = c["user"]["window_size"]
     yield f"{window_size} realtime cycles"
+    if c["user"].get("window_prune"):
+        is_cycledir = lambda path: path.is_dir() and re.match(r"^\d{10}", path.name)
+        cycledirs = sorted(filter(is_cycledir, Path(c["app"]["rundir"]).iterdir()))
+        for path in cycledirs[:-window_size]:
+            logging.info("Pruning cycle directory %s", path)
+            rmtree(path)
     ts = datetime.now(UTC).timestamp()
+    cycle_freq = c["app"]["cycle_freq"]
     latest = datetime.fromtimestamp(ts - (ts % cycle_freq.total_seconds()), UTC)
     yield [cycle(latest - (n * cycle_freq)) for n in range(window_size)]
 
