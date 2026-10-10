@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta, timezone
 from functools import cache
 from pathlib import Path
 from shutil import rmtree
+from typing import TypeVar
 
 from iotaa import Asset, collection, external, task
 from pydantic import BaseModel, ConfigDict
@@ -57,6 +58,9 @@ class ConfigCycles(Config_):
 class ConfigRealtime(Config_):
     app: AppRealtime
     user: User  # type: ignore[assignment]
+
+
+ConfigT = TypeVar("ConfigT", ConfigCycles, ConfigRealtime)
 
 
 # Public tasks:
@@ -114,12 +118,12 @@ def cycles() -> Iterator:
     # Process leading-edge cycles first.
 
     yield "cycles"
-    app = _config(ConfigCycles)["app"]
+    app = _config(ConfigCycles).app
     dts = []
-    dt = app["last_cycle"]
-    while dt >= app["first_cycle"]:
+    dt = app.last_cycle
+    while dt >= app.first_cycle:
         dts.append(dt)
-        dt -= app["cycle_freq"]
+        dt -= app.cycle_freq
     yield [cycle(dt) for dt in dts]
 
 
@@ -169,18 +173,16 @@ def realtime() -> Iterator:
     # first.
 
     c = _config(ConfigRealtime)
-    window_size = c["user"]["window_size"]
-    yield f"{window_size} realtime cycles"
-    if c["user"].get("window_prune"):
+    yield f"{c.user.window_size} realtime cycles"
+    if c.user.window_prune:
         is_cycledir = lambda path: path.is_dir() and re.match(r"^\d{10}$", path.name)
-        cycledirs = sorted(filter(is_cycledir, Path(c["app"]["rundir"]).iterdir()))
-        for path in cycledirs[:-window_size]:
+        cycledirs = sorted(filter(is_cycledir, Path(c.app.rundir).iterdir()))
+        for path in cycledirs[: -c.user.window_size]:
             logging.info("Pruning cycle directory %s", path)
             rmtree(path)
     ts = datetime.now(UTC).timestamp()
-    cycle_freq = c["app"]["cycle_freq"]
-    latest = datetime.fromtimestamp(ts - (ts % cycle_freq.total_seconds()), UTC)
-    yield [cycle(latest - (n * cycle_freq)) for n in range(window_size)]
+    latest = datetime.fromtimestamp(ts - (ts % c.app.cycle_freq.total_seconds()), UTC)
+    yield [cycle(latest - (n * c.app.cycle_freq)) for n in range(c.user.window_size)]
 
 
 # Private tasks:
@@ -262,10 +264,8 @@ def _cmd(
 
 
 @cache
-def _config(model: Config_) -> dict:
-    c = realize_to_dict(CONFIG)
-    model.model_validate(c)
-    return c
+def _config(model: type[ConfigT]) -> ConfigT:
+    return model.model_validate(realize_to_dict(CONFIG))
 
 
 def _dt_taskname(cycle_: CycleT, step: str) -> tuple[datetime, str]:

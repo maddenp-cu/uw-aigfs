@@ -220,13 +220,15 @@ def test_workflow_cycle(atask, cycle, ready):
 
 @mark.parametrize("ready", [True, False])
 def test_workflow_cycles(atask, cycle, ready):
-    app = {
-        "first_cycle": cycle,
-        "last_cycle": cycle + timedelta(hours=12),
-        "cycle_freq": timedelta(hours=6),
-    }
+    config = workflow.ConfigCycles.model_construct(
+        app=workflow.AppCycles.model_construct(
+            first_cycle=cycle,
+            last_cycle=cycle + timedelta(hours=12),
+            cycle_freq=timedelta(hours=6),
+        )
+    )
     with (
-        patch.object(workflow, "_config", return_value={"app": app}),
+        patch.object(workflow, "_config", return_value=config),
         patch.object(workflow, "cycle", Mock(wraps=lambda _: atask(ready))) as cycle_,
     ):
         node = workflow.cycles()
@@ -245,10 +247,14 @@ def test_workflow_realtime(atask, tmp_path, prune):
     for path in cycles:
         path.mkdir()
     old_cycle = cycles.pop(0)
-    config = {
-        "app": {"cycle_freq": timedelta(hours=6), "rundir": tmp_path},
-        "user": {"window_prune": prune, "window_size": 2},
-    }
+    app = workflow.AppRealtime.model_construct(
+        cycle_freq=timedelta(hours=6),
+        first_cycle=datetime(2026, 1, 1, tzinfo=UTC),
+        last_cycle=datetime(2026, 1, 2, tzinfo=UTC),
+        rundir=tmp_path,
+    )
+    user = workflow.User(window_prune=prune, window_size=2)
+    config = workflow.ConfigRealtime.model_construct(app=app, user=user)
     with (
         patch.object(workflow, "_config", return_value=config),
         patch.object(workflow, "cycle", Mock(wraps=lambda _: atask(ready=True))) as cycle,
@@ -264,17 +270,21 @@ def test_workflow_realtime(atask, tmp_path, prune):
     assert all(path.is_dir() for path in cycles)
 
 
-def test_workflow__config():
-    expected: dict[str, dict[str, object]] = {"app": {}, "user": {}}
-    with (
-        patch.object(workflow, "realize_to_dict", return_value=expected) as realize,
-        patch.object(workflow.ConfigCycles, "model_validate") as validate,
-    ):
+@mark.parametrize(
+    ("model", "expected_type"),
+    [
+        (workflow.ConfigCycles, workflow.ConfigCycles),
+        (workflow.ConfigRealtime, workflow.ConfigRealtime),
+    ],
+)
+def test_workflow__config(workflow_config, model, expected_type):
+    workflow_config["user"] = {"window_size": 2}
+    with patch.object(workflow, "realize_to_dict", return_value=workflow_config) as realize:
         workflow._config.cache_clear()
         try:
-            assert workflow._config(workflow.ConfigCycles) == expected
+            config = workflow._config(model)
+            assert isinstance(config, expected_type)
             realize.assert_called_once_with(workflow.CONFIG)
-            validate.assert_called_once_with(expected)
         finally:
             workflow._config.cache_clear()
 
