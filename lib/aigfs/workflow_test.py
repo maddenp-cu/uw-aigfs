@@ -108,6 +108,46 @@ def test_workflow_cycles(atask, cycle, ready):
     ]
 
 
+@mark.parametrize("prune", [True, False])
+def test_workflow_realtime(atask, tmp_path, prune):
+    cycles = [tmp_path / f"20261010{hh}" for hh in ("00", "06", "12")]
+    for path in cycles:
+        path.mkdir()
+    old_cycle = cycles.pop(0)
+    config = {
+        "app": {"cycle_freq": timedelta(hours=6), "rundir": tmp_path},
+        "user": {"window_prune": prune, "window_size": 2},
+    }
+    with (
+        patch.object(workflow, "_config", return_value=config),
+        patch.object(workflow, "cycle", Mock(wraps=lambda _: atask(ready=True))) as cycle,
+    ):
+        node = workflow.realtime()
+    assert node.ready
+    assert node.taskname == "2 realtime cycles"
+    active = [call.args[0] for call in cycle.call_args_list]
+    assert len(active) == 2
+    assert active[0].tzinfo is UTC
+    assert active[0] - active[1] == timedelta(hours=6)
+    assert old_cycle.is_dir() is not prune
+    assert all(path.is_dir() for path in cycles)
+
+
+def test_workflow__config():
+    expected: dict[str, dict[str, object]] = {"app": {}, "user": {}}
+    with (
+        patch.object(workflow, "realize_to_dict", return_value=expected) as realize,
+        patch.object(workflow, "validate") as validate,
+    ):
+        workflow._config.cache_clear()
+        try:
+            assert workflow._config() == expected
+            realize.assert_called_once_with(workflow.CONFIG)
+            validate.assert_called_once_with(expected)
+        finally:
+            workflow._config.cache_clear()
+
+
 @mark.parametrize("ready", [True, False])
 def test_workflow_forecast(atask, cfg, cycle, gribfiles, ready, tmp_path):
     cls = driver({STR.forecast: gribfiles}, tmp_path / "run")
@@ -249,6 +289,26 @@ def test_workflow__timegate(hours, ready):
 def test_workflow__dt_taskname(cycle):
     assert workflow._dt_taskname(cycle, "foo") == (cycle, "20251001 18Z foo")
     assert workflow._dt_taskname("2025-10-01T18", "foo") == (cycle, "20251001 18Z foo")
+
+
+def test_workflow__cmd(cycle, cfg, tmp_path):
+    obj = Mock(__module__="aigfs.drivers.inference")
+    obj.__class__.__name__ = "AIGFSInference"
+    expected = (
+        f"srun {tmp_path}/bin/run cmd uw execute --module aigfs.drivers.inference "
+        f"--classname AIGFSInference --task run --config {cfg} --key-path forecast "
+        "--cycle 20251001T18 --leadtime 12"
+    )
+    assert (
+        workflow._cmd(
+            obj,
+            ["forecast"],
+            cycle,
+            leadtime=timedelta(hours=12),
+            prefix="srun",
+        )
+        == expected
+    )
 
 
 def test_workflow__execute(capsys, lockkit):

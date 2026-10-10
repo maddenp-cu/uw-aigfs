@@ -143,7 +143,7 @@ def realtime() -> Iterator:
     window_size = c["user"]["window_size"]
     yield f"{window_size} realtime cycles"
     if c["user"].get("window_prune"):
-        is_cycledir = lambda path: path.is_dir() and re.match(r"^\d{10}", path.name)
+        is_cycledir = lambda path: path.is_dir() and re.match(r"^\d{10}$", path.name)
         cycledirs = sorted(filter(is_cycledir, Path(c["app"]["rundir"]).iterdir()))
         for path in cycledirs[:-window_size]:
             logging.info("Pruning cycle directory %s", path)
