@@ -37,6 +37,12 @@ class AppCycles(App_):
     cycle_freq: timedelta
 
 
+class AppRealtime(App_):
+    cycle_freq: timedelta
+    first_cycle: datetime
+    last_cycle: datetime
+
+
 class User(BaseModel):
     model_config = ConfigDict(extra="allow", strict=True)
     window_prune: bool = False
@@ -45,6 +51,11 @@ class User(BaseModel):
 
 class ConfigCycles(Config_):
     app: AppCycles
+    user: User  # type: ignore[assignment]
+
+
+class ConfigRealtime(Config_):
+    app: AppRealtime
     user: User  # type: ignore[assignment]
 
 
@@ -157,7 +168,7 @@ def realtime() -> Iterator:
     # Optionally remove trailing-edge cycle directories, then process leading-edge cycles, latest
     # first.
 
-    c = _config(ConfigCycles)
+    c = _config(ConfigRealtime)
     window_size = c["user"]["window_size"]
     yield f"{window_size} realtime cycles"
     if c["user"].get("window_prune"):
