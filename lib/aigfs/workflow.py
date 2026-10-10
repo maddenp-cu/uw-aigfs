@@ -33,7 +33,7 @@ CONFIG = APPDIR / STR.aigfs_yaml
 use_uwtools_logger()
 
 
-class App(App_):
+class AppCycles(App_):
     cycle_freq: timedelta
 
 
@@ -43,8 +43,8 @@ class User(BaseModel):
     window_size: int
 
 
-class Config(Config_):
-    app: App
+class ConfigCycles(Config_):
+    app: AppCycles
     user: User  # type: ignore[assignment]
 
 
@@ -103,7 +103,7 @@ def cycles() -> Iterator:
     # Process leading-edge cycles first.
 
     yield "cycles"
-    app = _config()["app"]
+    app = _config(ConfigCycles)["app"]
     dts = []
     dt = app["last_cycle"]
     while dt >= app["first_cycle"]:
@@ -157,7 +157,7 @@ def realtime() -> Iterator:
     # Optionally remove trailing-edge cycle directories, then process leading-edge cycles, latest
     # first.
 
-    c = _config()
+    c = _config(ConfigCycles)
     window_size = c["user"]["window_size"]
     yield f"{window_size} realtime cycles"
     if c["user"].get("window_prune"):
@@ -251,9 +251,9 @@ def _cmd(
 
 
 @cache
-def _config() -> dict:
+def _config(model: Config_) -> dict:
     c = realize_to_dict(CONFIG)
-    Config.model_validate(c)
+    model.model_validate(c)
     return c
 
 
