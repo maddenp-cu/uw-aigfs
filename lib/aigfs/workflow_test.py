@@ -89,39 +89,49 @@ def driver(output: dict, rundir: Path) -> Mock:
 def test_workflow_AppCycles(workflow_config):
     app = workflow.AppCycles.model_validate(workflow_config["app"])
     assert app.cycle_freq == timedelta(hours=12)
+    assert app.first_cycle == workflow_config["app"]["first_cycle"]
+    assert app.last_cycle == workflow_config["app"]["last_cycle"]
 
 
-def test_workflow_AppCycles__cycle_freq_required(with_del, workflow_config):
-    with raises(ValidationError) as e:
-        workflow.AppCycles.model_validate(with_del(workflow_config["app"], "cycle_freq"))
-    assert e.value.errors()[0]["loc"] == ("cycle_freq",)
-
-
-def test_workflow_AppCycles__cycle_freq_timedelta(with_set, workflow_config):
-    with raises(ValidationError) as e:
-        workflow.AppCycles.model_validate(with_set(workflow_config["app"], None, "cycle_freq"))
-    assert e.value.errors()[0]["loc"] == ("cycle_freq",)
-
-
-@mark.parametrize("field", ["first_cycle", "last_cycle"])
-def test_workflow_AppCycles__cycle_required(with_del, workflow_config, field):
+@mark.parametrize(
+    ("field", "value"),
+    [
+        ("cycle_freq", "not-a-timedelta"),
+        ("first_cycle", "not-a-datetime"),
+        ("last_cycle", "not-a-datetime"),
+    ],
+)
+def test_workflow_AppCycles__bad_and_missing(field, value, with_del, with_set, workflow_config):
+    # Bad:
     with raises(ValidationError) as e:
         workflow.AppCycles.model_validate(with_del(workflow_config["app"], field))
     assert e.value.errors()[0]["loc"] == (field,)
-
-
-@mark.parametrize("field", ["first_cycle", "last_cycle"])
-def test_workflow_AppCycles__cycle_datetime(with_set, workflow_config, field):
-    app = with_set(workflow_config["app"], "not-a-datetime", field)
+    # Missing:
     with raises(ValidationError) as e:
-        workflow.AppCycles.model_validate(app)
+        workflow.AppCycles.model_validate(with_set(workflow_config["app"], value, field))
     assert e.value.errors()[0]["loc"] == (field,)
 
 
 def test_workflow_AppRealtime(workflow_config):
-    app = workflow.AppRealtime.model_validate(workflow_config["app"])
-    assert app.first_cycle == workflow_config["app"]["first_cycle"]
-    assert app.last_cycle == workflow_config["app"]["last_cycle"]
+    app_data = workflow_config["app"]
+    del app_data["first_cycle"]
+    del app_data["last_cycle"]
+    app = workflow.AppRealtime.model_validate(app_data)
+    assert app.cycle_freq == timedelta(hours=12)
+    assert app.first_cycle is None
+    assert app.last_cycle is None
+
+
+@mark.parametrize(("field", "value"), [("cycle_freq", "not-a-timedelta"), ("cycle_freq", None)])
+def test_workflow_AppRealtime__bad_and_mmissing(with_del, with_set, workflow_config, field, value):
+    # Bad:
+    with raises(ValidationError) as e:
+        workflow.AppRealtime.model_validate(with_set(workflow_config["app"], value, field))
+    assert e.value.errors()[0]["loc"] == (field,)
+    # Missing:
+    with raises(ValidationError) as e:
+        workflow.AppRealtime.model_validate(with_del(workflow_config["app"], "cycle_freq"))
+    assert e.value.errors()[0]["loc"] == ("cycle_freq",)
 
 
 def test_workflow_User__optional_window_prune():
@@ -130,67 +140,54 @@ def test_workflow_User__optional_window_prune():
     assert user.window_prune is False
 
 
-def test_workflow_ConfigCycles(workflow_config):
-    workflow_config["user"] = {
-        "extra_setting": ["ok"],
-        "window_prune": False,
-        "window_size": 3,
-    }
-    config = workflow.ConfigCycles.model_validate(workflow_config)
-    assert isinstance(config.app, workflow.AppCycles)
+@mark.parametrize(
+    ("model", "app_model", "optional_cycles"),
+    [
+        (workflow.ConfigCycles, workflow.AppCycles, False),
+        (workflow.ConfigRealtime, workflow.AppRealtime, True),
+    ],
+)
+def test_workflow_Config(workflow_config, model, app_model, optional_cycles):
+    workflow_config["user"] = {"extra_setting": ["ok"], "window_prune": False, "window_size": 3}
+    if optional_cycles:
+        del workflow_config["app"]["first_cycle"]
+        del workflow_config["app"]["last_cycle"]
+    config = model.model_validate(workflow_config)
+    assert isinstance(config.app, app_model)
     assert config.user.model_dump() == workflow_config["user"]
 
 
-def test_workflow_ConfigCycles__cycle_freq_required(workflow_config):
-    workflow_config["app"].pop("cycle_freq")
-    workflow_config["user"] = {"window_size": 3}
-    with raises(ValidationError) as e:
-        workflow.ConfigCycles.model_validate(workflow_config)
-    assert e.value.errors()[0]["loc"] == ("app", "cycle_freq")
-
-
-def test_workflow_ConfigCycles__bad_no_user(with_del, workflow_config):
-    with raises(ValidationError):
-        workflow.ConfigCycles.model_validate(with_del(workflow_config, "user"))
-
-
 @mark.parametrize("user", [{}, {"window_size": True}, {"window_size": 3, "window_prune": 1}])
-def test_workflow_ConfigCycles__bad_vals(workflow_config, user):
+def test_workflow_Config__user_bad(workflow_config, user):
     workflow_config["user"] = user
     with raises(ValidationError):
         workflow.ConfigCycles.model_validate(workflow_config)
 
 
-def test_workflow_ConfigRealtime(workflow_config, with_del):
-    workflow_config["user"] = {"window_size": 3}
-    config = workflow.ConfigRealtime.model_validate(
-        with_del(with_del(workflow_config, "app", "first_cycle"), "app", "last_cycle")
-    )
-    assert isinstance(config.app, workflow.AppRealtime)
-    assert config.app.first_cycle is None
-    assert config.app.last_cycle is None
+def test_workflow_Config__user_missing(with_del, workflow_config):
+    with raises(ValidationError):
+        workflow.ConfigCycles.model_validate(with_del(workflow_config, "user"))
 
 
-@mark.parametrize(
-    ("field", "model"),
-    [
-        ("first_cycle", workflow.ConfigCycles),
-        ("last_cycle", workflow.ConfigCycles),
-    ],
-)
-def test_workflow_Config__cycle_required(with_del, workflow_config, field, model):
-    workflow_config["user"] = {"window_size": 3}
+@mark.parametrize("field", ["first_cycle", "last_cycle"])
+def test_workflow_ConfigCycles__cycle_missing(with_del, workflow_config, field):
     config = with_del(workflow_config, "app", field)
     with raises(ValidationError) as e:
-        model.model_validate(config)
+        workflow.ConfigCycles.model_validate(config)
     assert e.value.errors()[0]["loc"] == ("app", field)
 
 
+@mark.parametrize(
+    ("field", "value"),
+    [
+        ("cycle_freq", "not-a-timedelta"),
+        ("first_cycle", "not-a-datetime"),
+        ("last_cycle", "not-a-datetime"),
+    ],
+)
 @mark.parametrize("model", [workflow.ConfigCycles, workflow.ConfigRealtime])
-@mark.parametrize("field", ["first_cycle", "last_cycle"])
-def test_workflow_Config__cycle_datetime(with_set, workflow_config, model, field):
-    workflow_config["user"] = {"window_size": 3}
-    config = with_set(workflow_config, "not-a-datetime", "app", field)
+def test_workflow_Config__bad_app_types(with_set, workflow_config, model, field, value):
+    config = with_set(workflow_config, value, "app", field)
     with raises(ValidationError) as e:
         model.model_validate(config)
     assert e.value.errors()[0]["loc"] == ("app", field)
