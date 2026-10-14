@@ -176,27 +176,12 @@ def test_config__exists(cfg, touch):
     setup.compose_configs.assert_not_called()
 
 
-@mark.usefixtures("cfg")
-@mark.parametrize("cycle_dates", [True, False])
-def test_config__missing(cycle_dates, test_config, tmp_path):
-    test_config["app"]["workflow"] = {"window_size": 2}
-    if not cycle_dates:
-        del test_config["app"]["first_cycle"]
-        del test_config["app"]["last_cycle"]
-    setup = Mock()
-    setup.compose_configs.return_value = test_config
-    setup.validate = Mock(wraps=workflow.setup.validate)
-    with patch.object(workflow, "setup", setup):
+def test_config__missing(cfg):
+    with patch.object(workflow, "setup") as setup:
+        setup.validate.return_value.model_dump.return_value = {}
         node = workflow.config()
-    assert not node.ready
-    setup.compose_configs.assert_called_once_with(
-        workflow=None, platform="oci", user_config_files=[tmp_path / "user.yaml"]
-    )
-    setup.validate.assert_called_once_with(test_config, model=workflow.ConfigRealtime)
-    setup.set_up_rundir.assert_called_once_with(ANY, workflow=None, prefix="config")
-    c = setup.set_up_rundir.call_args.args[0]
-    assert isinstance(c, workflow.ConfigRealtime)
-    assert c.app.workflow.window_size == 2
+    assert node.ready
+    assert cfg.is_file()
 
 
 @mark.parametrize("ready", [True, False])

@@ -13,7 +13,7 @@ from typing import TypeVar
 
 from iotaa import Asset, Node, collection, external, task
 from pydantic import BaseModel, ConfigDict, PositiveInt
-from uwtools.api.config import realize_to_dict
+from uwtools.api.config import YAMLConfig, realize_to_dict
 from uwtools.api.driver import Driver
 from uwtools.api.logging import use_uwtools_logger
 from uwtools.api.utils import run_shell_cmd
@@ -79,7 +79,7 @@ def config() -> Iterator:
     user = APPDIR / "user.yaml"
     raw_config = setup.compose_configs(workflow=None, platform=STR.oci, user_config_files=[user])
     valid_config = setup.validate(raw_config, model=ConfigRealtime)
-    setup.set_up_rundir(valid_config, workflow=None, prefix=taskname)
+    YAMLConfig(valid_config.model_dump()).dump(CONFIG)
 
 
 @collection
