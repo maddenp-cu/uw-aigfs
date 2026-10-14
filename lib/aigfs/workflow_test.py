@@ -108,6 +108,7 @@ def test_workflow_AppRealtime__required(delete, with_del, with_set, test_config)
 
 def test_workflow_User():
     user = workflow.User(window_size=3)
+    assert user.remote_exec_forecast is None
     assert user.window_size == 3
     assert user.window_prune is False
 
@@ -126,7 +127,7 @@ def test_workflow_Config(test_config, model, app_model, optional_cycles):
         del test_config["app"]["last_cycle"]
     c = model.model_validate(test_config)
     assert isinstance(c.app, app_model)
-    assert c.user.model_dump() == test_config["user"]
+    assert c.user.model_dump(exclude_unset=True) == test_config["user"]
 
 
 @mark.parametrize("model", [workflow.ConfigCycles, workflow.ConfigRealtime])
@@ -220,11 +221,16 @@ def test_workflow_cycles(atask, cycle, ready, tz):
     assert all(x.args[0].tzinfo is UTC for x in cycle_.call_args_list)
 
 
+@mark.parametrize("prefix", [None, "foo"])
 @mark.parametrize("ready", [True, False])
-def test_workflow_forecast(atask, cfg, cycle, gribfiles, ready, tmp_path):
+def test_workflow_forecast(atask, cfg, cycle, gribfiles, prefix, ready, tmp_path):
     cls = driver({STR.forecast: gribfiles}, tmp_path / "run")
+    c = workflow.ConfigRealtime.model_construct(
+        user=workflow.User(window_size=1, remote_exec_forecast=prefix)
+    )
     with (
         patch.object(workflow, "AIGFSInference", cls),
+        patch.object(workflow, "_config", return_value=c) as _config,
         patch.object(workflow, "_schema", return_value=Path("/s")),
         patch.object(workflow, "prep", Mock(wraps=lambda _: atask(ready))) as prep,
         patch.object(workflow, "run_shell_cmd") as run_shell_cmd,
@@ -241,10 +247,15 @@ def test_workflow_forecast(atask, cfg, cycle, gribfiles, ready, tmp_path):
     prep.assert_called_once_with(cycle)
     assert node.ready is ready
     if ready:
+        _config.assert_called_once_with(workflow.ConfigRealtime)
         run_shell_cmd.assert_called_once_with(
             ANY, callback=ANY, cwd=cls.return_value.rundir, taskname="20251001 18Z forecast"
         )
+        command = run_shell_cmd.call_args.args[0]
+        s = "%s%s/bin/run cmd" % (f"{prefix} " if prefix else "", tmp_path)
+        assert command.startswith(s)
     else:
+        _config.assert_not_called()
         run_shell_cmd.assert_not_called()
 
 
@@ -447,11 +458,11 @@ def test_workflow__cmd(cycle, cfg, tmp_path):
     obj = Mock(__module__="aigfs.drivers.inference")
     obj.__class__.__name__ = "AIGFSInference"
     expected = (
-        f"srun {tmp_path}/bin/run cmd uw execute --module aigfs.drivers.inference "
+        f"foo {tmp_path}/bin/run cmd uw execute --module aigfs.drivers.inference "
         f"--classname AIGFSInference --task run --config {cfg} --key-path forecast "
         "--cycle 20251001T18 --leadtime 12"
     )
-    actual = workflow._cmd(obj, ["forecast"], cycle, leadtime=timedelta(hours=12), prefix="srun")
+    actual = workflow._cmd(obj, ["forecast"], cycle, leadtime=timedelta(hours=12), prefix="foo")
     assert actual == expected
 
 
@@ -463,12 +474,13 @@ def test_workflow__cmd(cycle, cfg, tmp_path):
     ],
 )
 def test_workflow__config(test_config, model, expected_type):
-    test_config["user"] = {"window_size": 2}
+    test_config["user"] = {"window_size": 2, "remote_exec_forecast": "foo"}
     with patch.object(workflow, "realize_to_dict", return_value=test_config) as realize:
         workflow._config.cache_clear()
         try:
             c = workflow._config(model)
             assert isinstance(c, expected_type)
+            assert c.user.remote_exec_forecast == "foo"
             realize.assert_called_once_with(workflow.CONFIG)
         finally:
             workflow._config.cache_clear()

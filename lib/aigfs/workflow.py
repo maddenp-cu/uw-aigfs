@@ -48,6 +48,7 @@ class AppRealtime(App_):
 
 class User(BaseModel):
     model_config = ConfigDict(extra="allow", strict=True)
+    remote_exec_forecast: str | None = None
     window_prune: bool = False
     window_size: PositiveInt
 
@@ -123,7 +124,7 @@ def forecast(cycle_: CycleT) -> Iterator:
     assets = [Asset(path, path.is_file) for path in driver.output[STR.forecast]]
     yield assets
     yield prep(dt)
-    prefix = "srun --exclusive --nodes=1 --time=30"
+    prefix = _config(ConfigRealtime).user.remote_exec_forecast
     cmd = _cmd(driver, key_path, dt, prefix=prefix)
     _execute(cmd, driver.rundir, taskname, assets)
 
@@ -264,10 +265,10 @@ def _cmd(
     key_path: list,
     dt: datetime,
     leadtime: timedelta | None = None,
-    prefix: str = "",
+    prefix: str | None = None,
 ) -> str:
     cmd = [
-        prefix,
+        prefix or "",
         f"{APPDIR}/bin/run cmd",
         "uw execute",
         "--module %s" % driver.__module__,
