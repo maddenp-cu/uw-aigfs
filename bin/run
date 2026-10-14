@@ -47,6 +47,37 @@ deploy() {
   ansible-playbook $d/playbooks/$playbook.yaml
 }
 
+format() {
+  activate $(env)
+  msg Formatting JSON
+  for f in $(jsfiles); do
+    jq -S . $f >$f.new || (echo "    in $f" && rm $f.new && false)
+    if cmp --quiet $f.new $f; then
+      rm $f.new
+    else
+      mv $f.new $f
+    fi
+  done
+  msg Formatting shell code
+  shfmt --indent 2 --write $(shfiles)
+  msg Formatting Python code
+  ruff format $(pyfiles)
+  msg Sorting Python imports
+  ruff check --select I --fix $(pyfiles)
+  conda deactivate
+}
+
+lint() {
+  activate $(env)
+  msg Linting YAML
+  yamllint --no-warnings $(yamlfiles)
+  msg Linting shell code
+  shellcheck --format=gcc --severity=info --shell=bash $(shfiles)
+  msg Linting Python code
+  ruff check $(pyfiles)
+  conda deactivate
+}
+
 makedocs() {
   local outdir rootdir
   rootdir=$(rootdir)
@@ -111,49 +142,6 @@ EOF
   unset PIP_VERBOSE XDG_CACHE_HOME
 }
 
-format() {
-  activate $(env)
-  msg Formatting JSON
-  for f in $(jsfiles); do
-    jq -S . $f >$f.new || (echo "    in $f" && rm $f.new && false)
-    if cmp --quiet $f.new $f; then
-      rm $f.new
-    else
-      mv $f.new $f
-    fi
-  done
-  msg Formatting shell code
-  shfmt --indent 2 --write $(shfiles)
-  msg Formatting Python code
-  ruff format $(pyfiles)
-  msg Sorting Python imports
-  ruff check --select I --fix $(pyfiles)
-  conda deactivate
-}
-
-jsfiles() {
-  find $(rootdir) -path $(condadir) -prune -o -type f -name "*.json*" -print | sort
-}
-
-lint() {
-  activate $(env)
-  msg Linting YAML
-  yamllint --no-warnings $(yamlfiles)
-  msg Linting shell code
-  shellcheck --format=gcc --severity=info --shell=bash $(shfiles)
-  msg Linting Python code
-  ruff check $(pyfiles)
-  conda deactivate
-}
-
-msg() {
-  echo "=> $*"
-}
-
-pyfiles() {
-  find $(rootdir) -path $(condadir) -prune -o -type f -name "*.py" -print | sort
-}
-
 rmenv() {
   local env
   env=$(env)
@@ -161,12 +149,6 @@ rmenv() {
   msg Removing environment $env
   conda env remove --name $env --yes
   msg Removed environment $env
-}
-
-shfiles() {
-  find $(rootdir) -path $(condadir) -prune -o -type f -print | sort | while read -r x; do
-    file $x | grep -q "Bourne-Again shell script" && echo $x
-  done | sort
 }
 
 typecheck() {
@@ -210,8 +192,26 @@ fromroot() {
   printf "$(rootdir)/%s " "$@"
 }
 
+jsfiles() {
+  find $(rootdir) -path $(condadir) -prune -o -type f -name "*.json*" -print | sort
+}
+
+msg() {
+  echo "=> $*"
+}
+
+pyfiles() {
+  find $(rootdir) -path $(condadir) -prune -o -type f -name "*.py" -print | sort
+}
+
 rootdir() {
   readlink -f $(dirname $(dirname $0))
+}
+
+shfiles() {
+  find $(rootdir) -path $(condadir) -prune -o -type f -print | sort | while read -r x; do
+    file $x | grep -q "Bourne-Again shell script" && echo $x
+  done | sort
 }
 
 yamlfiles() {
