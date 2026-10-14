@@ -23,7 +23,7 @@ from aigfs.drivers.ics import AIGFSICs
 from aigfs.drivers.inference import AIGFSInference
 from aigfs.drivers.post import AIGFSPost
 from aigfs.strings import STR
-from aigfs.validation import App, Config
+from aigfs.validation import App, Config, validate
 
 APPDIR = Path(os.environ.get("APPDIR") or Path.cwd())
 CONFIG = APPDIR / STR.aigfs_yaml
@@ -284,7 +284,7 @@ def _cmd(
 
 @cache
 def _config(model: type[ConfigT]) -> ConfigT:
-    return model.model_validate(realize_to_dict(CONFIG))
+    return validate(realize_to_dict(CONFIG), model)
 
 
 def _dt_taskname(cycle_: CycleT, step: str) -> tuple[datetime, str]:
