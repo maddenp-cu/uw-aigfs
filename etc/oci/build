@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-keep=(ca-certificates make slurm-client)
+keep=(ca-certificates make)
 lose=(curl g++ git)
 
 apt-get update
