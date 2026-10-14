@@ -23,8 +23,7 @@ from aigfs.drivers.ics import AIGFSICs
 from aigfs.drivers.inference import AIGFSInference
 from aigfs.drivers.post import AIGFSPost
 from aigfs.strings import STR
-from aigfs.validation import App as App_
-from aigfs.validation import Config as Config_
+from aigfs.validation import App, Config
 
 APPDIR = Path(os.environ.get("APPDIR") or Path.cwd())
 CONFIG = APPDIR / STR.aigfs_yaml
@@ -36,31 +35,31 @@ use_uwtools_logger()
 # Validation classes:
 
 
-class AppCycles(App_):
-    cycle_freq: timedelta
-    first_cycle: datetime
-    last_cycle: datetime
-
-
-class AppRealtime(App_):
-    cycle_freq: timedelta
-
-
-class User(BaseModel):
-    model_config = ConfigDict(extra="allow", strict=True)
+class Workflow(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
     remote_exec_forecast: str | None = None
     window_prune: bool = False
     window_size: PositiveInt
 
 
-class ConfigCycles(Config_):
+class AppCycles(App):
+    cycle_freq: timedelta
+    first_cycle: datetime
+    last_cycle: datetime
+    workflow: Workflow
+
+
+class AppRealtime(App):
+    cycle_freq: timedelta
+    workflow: Workflow
+
+
+class ConfigCycles(Config):
     app: AppCycles
-    user: User  # type: ignore[assignment]
 
 
-class ConfigRealtime(Config_):
+class ConfigRealtime(Config):
     app: AppRealtime
-    user: User  # type: ignore[assignment]
 
 
 ConfigT = TypeVar("ConfigT", ConfigCycles, ConfigRealtime)
@@ -79,7 +78,7 @@ def config() -> Iterator:
     yield None
     user = APPDIR / "user.yaml"
     raw_config = setup.compose_configs(workflow=None, platform=STR.oci, user_config_files=[user])
-    valid_config = setup.validate(raw_config)
+    valid_config = setup.validate(raw_config, model=ConfigRealtime)
     setup.set_up_rundir(valid_config, workflow=None, prefix=taskname)
 
 
@@ -124,7 +123,7 @@ def forecast(cycle_: CycleT) -> Iterator:
     assets = [Asset(path, path.is_file) for path in driver.output[STR.forecast]]
     yield assets
     yield prep(dt)
-    prefix = _config(ConfigRealtime).user.remote_exec_forecast
+    prefix = _config(ConfigRealtime).app.workflow.remote_exec_forecast
     cmd = _cmd(driver, key_path, dt, prefix=prefix)
     _execute(cmd, driver.rundir, taskname, assets)
 
@@ -174,11 +173,11 @@ def realtime() -> Iterator:
     # Process leading-edge cycles, latest first. Optionally remove trailing-edge cycle directories.
 
     c = _config(ConfigRealtime)
-    yield f"{c.user.window_size} realtime cycles"
+    yield f"{c.app.workflow.window_size} realtime cycles"
     ts = datetime.now(UTC).timestamp()
-    n = c.user.window_size
+    n = c.app.workflow.window_size
     latest = datetime.fromtimestamp(ts - (ts % c.app.cycle_freq.total_seconds()), UTC)
-    reqs: list[Node] = [_prune(Path(c.app.rundir), n)] if c.user.window_prune else []
+    reqs: list[Node] = [_prune(Path(c.app.rundir), n)] if c.app.workflow.window_prune else []
     reqs.extend([cycle(latest - (n * c.app.cycle_freq)) for n in range(n)])
     yield reqs
 

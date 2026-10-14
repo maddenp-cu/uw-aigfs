@@ -161,12 +161,12 @@ class Config(BaseModel):
 # Public functions
 
 
-def validate(config: dict[str, object]) -> Config:
+def validate(config: dict[str, object], model: type[Config] = Config) -> Config:
     """
     Validate a config.
     """
     try:
-        return Config.model_validate(config)
+        return model.model_validate(config)
     except ValidationError as e:
         logging.error("Config validation failed:")
         lines = pformat(e.errors()).split("\n")

@@ -71,6 +71,7 @@ def driver(output: dict, rundir: Path) -> Mock:
 
 
 def test_workflow_AppCycles(test_config):
+    test_config["app"]["workflow"] = {"window_size": 2}
     app = workflow.AppCycles.model_validate(test_config["app"])
     assert app.cycle_freq == timedelta(hours=12)
     assert app.first_cycle == test_config["app"]["first_cycle"]
@@ -81,6 +82,7 @@ def test_workflow_AppCycles(test_config):
 @mark.parametrize("field", ["cycle_freq", "first_cycle", "last_cycle"])
 def test_workflow_AppCycles__required(delete, field, with_del, with_set, test_config):
     app = test_config["app"]
+    app["workflow"] = {"window_size": 2}
     app = with_del(app, field) if delete else with_set(app, None, field)
     with raises(ValidationError) as e:
         workflow.AppCycles.model_validate(app)
@@ -89,6 +91,7 @@ def test_workflow_AppCycles__required(delete, field, with_del, with_set, test_co
 
 def test_workflow_AppRealtime(test_config):
     app_data = test_config["app"]
+    app_data["workflow"] = {"window_size": 2}
     del app_data["first_cycle"]
     del app_data["last_cycle"]
     app = workflow.AppRealtime.model_validate(app_data)
@@ -100,17 +103,18 @@ def test_workflow_AppRealtime(test_config):
 @mark.parametrize("delete", [True, False])
 def test_workflow_AppRealtime__required(delete, with_del, with_set, test_config):
     app = test_config["app"]
+    app["workflow"] = {"window_size": 2}
     app = with_del(app, "cycle_freq") if delete else with_set(app, None, "cycle_freq")
     with raises(ValidationError) as e:
         workflow.AppRealtime.model_validate(app)
     assert e.value.errors()[0]["loc"] == ("cycle_freq",)
 
 
-def test_workflow_User():
-    user = workflow.User(window_size=3)
-    assert user.remote_exec_forecast is None
-    assert user.window_size == 3
-    assert user.window_prune is False
+def test_workflow_Workflow():
+    workflow_ = workflow.Workflow(window_size=3)
+    assert workflow_.remote_exec_forecast is None
+    assert workflow_.window_size == 3
+    assert workflow_.window_prune is False
 
 
 @mark.parametrize(
@@ -121,38 +125,43 @@ def test_workflow_User():
     ],
 )
 def test_workflow_Config(test_config, model, app_model, optional_cycles):
-    test_config["user"] = {"extra_setting": ["ok"], "window_prune": False, "window_size": 3}
+    test_config["app"]["workflow"] = {
+        "remote_exec_forecast": "srun",
+        "window_prune": False,
+        "window_size": 3,
+    }
+    test_config["user"] = {"extra_setting": ["ok"]}
     if optional_cycles:
         del test_config["app"]["first_cycle"]
         del test_config["app"]["last_cycle"]
     c = model.model_validate(test_config)
     assert isinstance(c.app, app_model)
-    assert c.user.model_dump(exclude_unset=True) == test_config["user"]
+    assert c.app.workflow.model_dump(exclude_unset=True) == test_config["app"]["workflow"]
+    assert c.user == test_config["user"]
 
 
-@mark.parametrize("model", [workflow.ConfigCycles, workflow.ConfigRealtime])
 @mark.parametrize(
-    "user",
+    "settings",
     [
         {},
         {"window_size": True},
         {"window_size": 0},
         {"window_size": -1},
         {"window_size": 3, "window_prune": 1},
+        {"window_size": 3, "remote_exec_forecast": 1},
+        {"window_size": 3, "extra_setting": True},
     ],
 )
-def test_workflow_Config__user_bad(model, user, test_config):
-    test_config["user"] = user
-    with raises(ValidationError) as e:
-        model.model_validate(test_config)
-    assert e.value.errors()[0]["loc"][0] == "user"
+def test_workflow_Workflow__bad(settings):
+    with raises(ValidationError):
+        workflow.Workflow.model_validate(settings)
 
 
 @mark.parametrize("model", [workflow.ConfigCycles, workflow.ConfigRealtime])
-def test_workflow_Config__user_missing(model, with_del, test_config):
+def test_workflow_Config__workflow_missing(model, test_config):
     with raises(ValidationError) as e:
-        model.model_validate(with_del(test_config, "user"))
-    assert e.value.errors()[0]["loc"] == ("user",)
+        model.model_validate(test_config)
+    assert e.value.errors()[0]["loc"] == ("app", "workflow")
 
 
 # Tests for public tasks:
@@ -168,19 +177,26 @@ def test_config__exists(cfg, touch):
 
 
 @mark.usefixtures("cfg")
-def test_config__missing(test_config, tmp_path):
+@mark.parametrize("cycle_dates", [True, False])
+def test_config__missing(cycle_dates, test_config, tmp_path):
+    test_config["app"]["workflow"] = {"window_size": 2}
+    if not cycle_dates:
+        del test_config["app"]["first_cycle"]
+        del test_config["app"]["last_cycle"]
     setup = Mock()
     setup.compose_configs.return_value = test_config
+    setup.validate = Mock(wraps=workflow.setup.validate)
     with patch.object(workflow, "setup", setup):
         node = workflow.config()
     assert not node.ready
     setup.compose_configs.assert_called_once_with(
         workflow=None, platform="oci", user_config_files=[tmp_path / "user.yaml"]
     )
-    setup.validate.assert_called_once_with(test_config)
-    setup.set_up_rundir.assert_called_once_with(
-        setup.validate.return_value, workflow=None, prefix="config"
-    )
+    setup.validate.assert_called_once_with(test_config, model=workflow.ConfigRealtime)
+    setup.set_up_rundir.assert_called_once_with(ANY, workflow=None, prefix="config")
+    c = setup.set_up_rundir.call_args.args[0]
+    assert isinstance(c, workflow.ConfigRealtime)
+    assert c.app.workflow.window_size == 2
 
 
 @mark.parametrize("ready", [True, False])
@@ -226,7 +242,9 @@ def test_workflow_cycles(atask, cycle, ready, tz):
 def test_workflow_forecast(atask, cfg, cycle, gribfiles, prefix, ready, tmp_path):
     cls = driver({STR.forecast: gribfiles}, tmp_path / "run")
     c = workflow.ConfigRealtime.model_construct(
-        user=workflow.User(window_size=1, remote_exec_forecast=prefix)
+        app=workflow.AppRealtime.model_construct(
+            workflow=workflow.Workflow(window_size=1, remote_exec_forecast=prefix)
+        )
     )
     with (
         patch.object(workflow, "AIGFSInference", cls),
@@ -319,9 +337,12 @@ def test_workflow_prep(atask, cfg, cycle, ready, tmp_path):
 )
 @mark.parametrize("prune", [True, False])
 def test_workflow_realtime(atask, expected, freq, now, prune, tmp_path, utc):
-    app = workflow.AppRealtime.model_construct(cycle_freq=timedelta(hours=freq), rundir=tmp_path)
-    user = workflow.User(window_prune=prune, window_size=3)
-    c = workflow.ConfigRealtime.model_construct(app=app, user=user)
+    app = workflow.AppRealtime.model_construct(
+        cycle_freq=timedelta(hours=freq),
+        rundir=tmp_path,
+        workflow=workflow.Workflow(window_prune=prune, window_size=3),
+    )
+    c = workflow.ConfigRealtime.model_construct(app=app)
     dt = Mock(wraps=datetime)
     dt.now.return_value = utc(2026, 10, 10, *now)
     with (
@@ -466,21 +487,15 @@ def test_workflow__cmd(cycle, cfg, tmp_path):
     assert actual == expected
 
 
-@mark.parametrize(
-    ("model", "expected_type"),
-    [
-        (workflow.ConfigCycles, workflow.ConfigCycles),
-        (workflow.ConfigRealtime, workflow.ConfigRealtime),
-    ],
-)
-def test_workflow__config(test_config, model, expected_type):
-    test_config["user"] = {"window_size": 2, "remote_exec_forecast": "foo"}
+@mark.parametrize("model", [workflow.ConfigCycles, workflow.ConfigRealtime])
+def test_workflow__config(test_config, model):
+    test_config["app"]["workflow"] = {"window_size": 2, "remote_exec_forecast": "foo"}
     with patch.object(workflow, "realize_to_dict", return_value=test_config) as realize:
         workflow._config.cache_clear()
         try:
             c = workflow._config(model)
-            assert isinstance(c, expected_type)
-            assert c.user.remote_exec_forecast == "foo"
+            assert isinstance(c, model)
+            assert c.app.workflow.remote_exec_forecast == "foo"
             realize.assert_called_once_with(workflow.CONFIG)
         finally:
             workflow._config.cache_clear()
