@@ -106,7 +106,7 @@ def test_setup_main(workflow):
         use_uwtools_logger.assert_called_once_with(verbose=True)
         compose_configs.assert_called_once_with(workflow, "ursa", [Path("/path/to/a.yaml")])
         config = {STR.app: {"key": "val"}}
-        validate.assert_called_once_with(config)
+        validate.assert_called_once_with(config, setup.Config)
         set_up_rundir.assert_called_once_with(validate.return_value, workflow)
 
 

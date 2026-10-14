@@ -7,7 +7,7 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 from pprint import pformat
-from typing import Literal, overload
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator, model_validator
 
@@ -161,15 +161,7 @@ class Config(BaseModel):
 # Public functions
 
 
-@overload
-def validate(config: dict[str, object]) -> Config: ...
-
-
-@overload
-def validate[ConfigT: Config](config: dict[str, object], model: type[ConfigT]) -> ConfigT: ...
-
-
-def validate(config: dict[str, object], model: type[Config] = Config) -> Config:
+def validate[ConfigT: Config](config: dict[str, object], model: type[ConfigT]) -> ConfigT:
     """
     Validate a config.
     """

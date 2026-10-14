@@ -44,7 +44,7 @@ def main() -> None:
     args = parse_args()
     use_uwtools_logger(verbose=args.verbose)
     raw_config = compose_configs(args.workflow, args.platform, args.user_config_files)
-    valid_config = validate(raw_config)
+    valid_config = validate(raw_config, Config)
     set_up_rundir(valid_config, args.workflow)
 
 

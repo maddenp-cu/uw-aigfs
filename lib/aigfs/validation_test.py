@@ -229,14 +229,14 @@ def test_validation_Config__optional_cycles_without_engine(args_config):
 
 
 def test_validation_validate(args_config, with_set):
-    assert validation.validate(config=args_config)
-    assert validation.validate(config=with_set(args_config, {}, "user"))
+    assert validation.validate(config=args_config, model=validation.Config)
+    assert validation.validate(config=with_set(args_config, {}, "user"), model=validation.Config)
 
 
 def test_validation_validate__fail(args_app, logcap):
     del args_app[STR.rundir]
     with raises(SystemExit) as e:
-        validation.validate({STR.app: args_app})
+        validation.validate({STR.app: args_app}, model=validation.Config)
     assert e.value.code == 1
     assert "Config validation failed:" in logcap.text
     assert "'loc': ('app', 'rundir')" in logcap.text
