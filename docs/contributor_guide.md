@@ -201,10 +201,10 @@ When adding a new workflow stage, you will typically need to:
 As user `role.rtaigfs`, `cd` to the appropriate scratch workspace, then:
 
 ```
-$ git clone https://github.com/NOAA-GSL/uw-aigfs.git rtaigfs
-$ cd rtaigfs/
-$ make env
-$ make deploy playbook=rtaigfs-ursa
+git clone https://github.com/NOAA-GSL/uw-aigfs.git rtaigfs
+cd rtaigfs/
+make env
+make deploy playbook=rtaigfs-ursa
 ```
 
 ### Developer Testing Procedure
