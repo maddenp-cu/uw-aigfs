@@ -48,6 +48,14 @@ deploy() {
   cmd base ansible-playbook $d/playbooks/$playbook.yaml
 }
 
+format() {
+  cmd $(env) format_in_env
+}
+
+lint() {
+  cmd $(env) lint_in_env
+}
+
 make_docs() {
   local outdir rootdir
   rootdir=$(rootdir)
@@ -61,10 +69,74 @@ make_docs() {
 
 make_env() {
   bootstrap
-  cmd base _make_env
+  cmd base make_env_conda_envs "$@"
 }
 
-_make_env() {
+rmenv() {
+  local env
+  env=$(env)
+  msg Removing environment $env
+  cmd base conda env remove --name $env --yes
+  msg Removed environment $env
+}
+
+typecheck() {
+  msg Typechecking Python code
+  cmd $(env) MYPYPATH=$(rootdir)/drivers mypy $(pyfiles)
+}
+
+unittest() {
+  msg Running Python unit tests
+  cmd $(env) pytest --cov=aigfs --cov-report=term-missing --ignore=conda/ .
+}
+
+# Helpers:
+
+condadir() {
+  echo ${CONDADIR:-$(rootdir)/conda}
+}
+
+env() {
+  sed -n '/^name:.*/ s/^name: *//p' $(envyaml)
+}
+
+envyaml() {
+  echo $(rootdir)/etc/env/aigfs.yaml
+}
+
+format_in_env() {
+  local f
+  msg Formatting JSON
+  for f in $(jsfiles); do
+    jq -S . $f >$f.new || (echo "    in $f" && rm $f.new && false)
+    if cmp --quiet $f.new $f; then
+      rm $f.new
+    else
+      mv $f.new $f
+    fi
+  done
+  msg Formatting shell code
+  shfmt --indent 2 --write $(shfiles)
+  msg Formatting Python code
+  ruff format $(pyfiles)
+  msg Sorting Python imports
+  ruff check --select I --fix $(pyfiles)
+}
+
+jsfiles() {
+  find $(rootdir) -path $(condadir) -prune -o -type f -name "*.json*" -print | sort
+}
+
+lint_in_env() {
+  msg Linting YAML
+  yamllint --no-warnings $(yamlfiles)
+  msg Linting shell code
+  shellcheck --format=gcc --severity=info --shell=bash $(shfiles)
+  msg Linting Python code
+  ruff check $(pyfiles)
+}
+
+make_env_conda_envs() {
   local condadir dir_a dir_d env envdir libdir prefix update
   condadir=$(condadir)
   env=$(env)
@@ -114,46 +186,6 @@ EOF
   unset PIP_VERBOSE XDG_CACHE_HOME
 }
 
-format() {
-  cmd $(env) _format
-}
-
-_format() {
-  local f
-  msg Formatting JSON
-  for f in $(jsfiles); do
-    jq -S . $f >$f.new || (echo "    in $f" && rm $f.new && false)
-    if cmp --quiet $f.new $f; then
-      rm $f.new
-    else
-      mv $f.new $f
-    fi
-  done
-  msg Formatting shell code
-  shfmt --indent 2 --write $(shfiles)
-  msg Formatting Python code
-  ruff format $(pyfiles)
-  msg Sorting Python imports
-  ruff check --select I --fix $(pyfiles)
-}
-
-jsfiles() {
-  find $(rootdir) -path $(condadir) -prune -o -type f -name "*.json*" -print | sort
-}
-
-lint() {
-  cmd $(env) _lint
-}
-
-_lint() {
-  msg Linting YAML
-  yamllint --no-warnings $(yamlfiles)
-  msg Linting shell code
-  shellcheck --format=gcc --severity=info --shell=bash $(shfiles)
-  msg Linting Python code
-  ruff check $(pyfiles)
-}
-
 msg() {
   echo "=> $*"
 }
@@ -162,12 +194,8 @@ pyfiles() {
   find $(rootdir) -path $(condadir) -prune -o -type f -name "*.py" -print | sort
 }
 
-rmenv() {
-  local env
-  env=$(env)
-  msg Removing environment $env
-  cmd base conda env remove --name $env --yes
-  msg Removed environment $env
+rootdir() {
+  readlink -f $(dirname $(dirname ${BASH_SOURCE[0]}))
 }
 
 shfiles() {
@@ -176,43 +204,11 @@ shfiles() {
   done | sort
 }
 
-typecheck() {
-  msg Typechecking Python code
-  cmd $(env) MYPYPATH=$(rootdir)/drivers mypy $(pyfiles)
-}
-
-unittest() {
-  msg Running Python unit tests
-  cmd $(env) pytest --cov=aigfs --cov-report=term-missing --ignore=conda/ .
-}
-
-# Helpers:
-
-condadir() {
-  echo ${CONDADIR:-$(rootdir)/conda}
-}
-
-env() {
-  sed -n '/^name:.*/ s/^name: *//p' $(envyaml)
-}
-
-envyaml() {
-  echo $(rootdir)/etc/env/aigfs.yaml
-}
-
-fromroot() {
-  printf "$(rootdir)/%s " "$@"
-}
-
-rootdir() {
-  readlink -f $(dirname $(dirname ${BASH_SOURCE[0]}))
-}
-
 yamlfiles() {
   find $(rootdir) -path $(condadir) -prune -o -type f -name "*.yaml" -print | sort | grep -v "^.*/aigfs.yaml$"
 }
 
-# Main entrypoint:
+# Main entry point:
 
 test $# -eq 0 && echo "usage: $(basename $0) tool [args ...]" && exit 1
 tool=$1
