@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -aeuo pipefail
 
@@ -7,7 +7,7 @@ set -aeuo pipefail
 # Tools:
 
 bootstrap() {
-  local condadir env rootdir
+  local condadir env installer machine os rootdir version
   condadir=$(condadir)
   env=$(env)
   rootdir=$(rootdir)
@@ -15,26 +15,28 @@ bootstrap() {
     msg Using existing conda: $condadir
   else
     msg Installing conda to $condadir
-    (
-      os=$(uname)
-      test $os == Darwin && os=MacOSX
-      machine=$(uname -m)
-      installer=Miniforge3-$os-$machine.sh
-      version=26.3.2-3
-      curl -sSLO https://github.com/conda-forge/miniforge/releases/download/$version/$installer
-      bash $installer -bfp $condadir
-      rm -v $installer
-      activate base
-      conda install --quiet --yes ansible=14.2.*
-    )
+    os=$(uname)
+    test $os == Darwin && os=MacOSX
+    machine=$(uname -m)
+    installer=Miniforge3-$os-$machine.sh
+    version=26.3.2-3
+    curl -sSLO https://github.com/conda-forge/miniforge/releases/download/$version/$installer
+    bash $installer -bfp $condadir
+    rm -v $installer
+    cmd base conda install --quiet --yes ansible=14.2.*
     msg Installed conda to $condadir
   fi
 }
 
 cmd() {
-  activate $(env)
-  "$@"
-  conda deactivate
+  local env
+  env=$1
+  shift
+  . $(condadir)/etc/profile.d/conda.sh
+  CONDARC=$(rootdir)/.condarc
+  export CONDARC
+  conda run --live-stream --name $env "$@"
+  unset CONDARC
 }
 
 deploy() {
@@ -43,28 +45,29 @@ deploy() {
   playbook=$1
   d=$(rootdir)/etc/ansible
   export ANSIBLE_CONFIG=$d/ansible.cfg
-  activate base
-  ansible-playbook $d/playbooks/$playbook.yaml
+  cmd base ansible-playbook $d/playbooks/$playbook.yaml
 }
 
-makedocs() {
+make_docs() {
   local outdir rootdir
   rootdir=$(rootdir)
   outdir=$rootdir/docs/api
-  activate $(env)
   msg Building documentation in $outdir
   export PYTHONWARNINGS="ignore:Error parsing type annotation"
-  pdoc --output-dir $outdir $rootdir/lib/aigfs
-  conda deactivate
+  cmd $(env) pdoc --output-dir $outdir $rootdir/lib/aigfs
   msg Built documentation in $outdir
+  unset PYTHONWARNINGS
 }
 
-makeenv() {
+make_env() {
+  bootstrap
+  cmd base _make_env
+}
+
+_make_env() {
   local condadir dir_a dir_d env envdir libdir prefix update
   condadir=$(condadir)
   env=$(env)
-  bootstrap
-  activate base
   PIP_VERBOSE=1
   XDG_CACHE_HOME=$condadir/cache
   export PIP_VERBOSE XDG_CACHE_HOME
@@ -112,7 +115,11 @@ EOF
 }
 
 format() {
-  activate $(env)
+  cmd $(env) _format
+}
+
+_format() {
+  local f
   msg Formatting JSON
   for f in $(jsfiles); do
     jq -S . $f >$f.new || (echo "    in $f" && rm $f.new && false)
@@ -128,7 +135,6 @@ format() {
   ruff format $(pyfiles)
   msg Sorting Python imports
   ruff check --select I --fix $(pyfiles)
-  conda deactivate
 }
 
 jsfiles() {
@@ -136,14 +142,16 @@ jsfiles() {
 }
 
 lint() {
-  activate $(env)
+  cmd $(env) _lint
+}
+
+_lint() {
   msg Linting YAML
   yamllint --no-warnings $(yamlfiles)
   msg Linting shell code
   shellcheck --format=gcc --severity=info --shell=bash $(shfiles)
   msg Linting Python code
   ruff check $(pyfiles)
-  conda deactivate
 }
 
 msg() {
@@ -157,9 +165,8 @@ pyfiles() {
 rmenv() {
   local env
   env=$(env)
-  activate base
   msg Removing environment $env
-  conda env remove --name $env --yes
+  cmd base conda env remove --name $env --yes
   msg Removed environment $env
 }
 
@@ -170,29 +177,16 @@ shfiles() {
 }
 
 typecheck() {
-  activate $(env)
   msg Typechecking Python code
-  MYPYPATH=$(rootdir)/drivers mypy $(pyfiles)
-  conda deactivate
+  cmd $(env) MYPYPATH=$(rootdir)/drivers mypy $(pyfiles)
 }
 
 unittest() {
-  activate $(env)
   msg Running Python unit tests
-  pytest --cov=aigfs --cov-report=term-missing --ignore=conda/ .
-  conda deactivate
+  cmd $(env) pytest --cov=aigfs --cov-report=term-missing --ignore=conda/ .
 }
 
 # Helpers:
-
-activate() {
-  local env
-  env=$1
-  . $(condadir)/etc/profile.d/conda.sh
-  CONDARC=$(rootdir)/.condarc
-  export CONDARC
-  conda activate $env
-}
 
 condadir() {
   echo ${CONDADIR:-$(rootdir)/conda}
@@ -211,7 +205,7 @@ fromroot() {
 }
 
 rootdir() {
-  readlink -f $(dirname $(dirname $0))
+  readlink -f $(dirname $(dirname ${BASH_SOURCE[0]}))
 }
 
 yamlfiles() {

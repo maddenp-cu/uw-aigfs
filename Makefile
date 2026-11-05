@@ -23,13 +23,13 @@ deploy:
 	@bin/run deploy $(playbook)
 
 devenv:
-	@bin/run makeenv dev
+	@bin/run make_env dev
 
 docs:
-	@bin/run makedocs
+	@bin/run make_docs
 
 env:
-	@bin/run makeenv
+	@bin/run make_env
 
 format:
 	@bin/run format
