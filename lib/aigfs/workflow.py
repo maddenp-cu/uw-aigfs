@@ -36,14 +36,14 @@ use_uwtools_logger()
 # Validation classes:
 
 
-class AppCycles(App_):
+class AppRealtime(App_):
+    cycle_freq: timedelta
+
+
+class AppRetro(App_):
     cycle_freq: timedelta
     first_cycle: datetime
     last_cycle: datetime
-
-
-class AppRealtime(App_):
-    cycle_freq: timedelta
 
 
 class User(BaseModel):
@@ -52,17 +52,17 @@ class User(BaseModel):
     window_size: PositiveInt
 
 
-class ConfigCycles(Config_):
-    app: AppCycles
-    user: User  # type: ignore[assignment]
-
-
 class ConfigRealtime(Config_):
     app: AppRealtime
     user: User  # type: ignore[assignment]
 
 
-ConfigT = TypeVar("ConfigT", ConfigCycles, ConfigRealtime)
+class ConfigRetro(Config_):
+    app: AppRetro
+    user: User  # type: ignore[assignment]
+
+
+ConfigT = TypeVar("ConfigT", ConfigRetro, ConfigRealtime)
 
 # Public tasks:
 
@@ -101,7 +101,7 @@ def cycles() -> Iterator:
     # Process leading-edge cycles first.
 
     yield "cycles"
-    app = _config(ConfigCycles).app
+    app = _config(ConfigRetro).app
     dts = []
     dt, first = _utc(app.last_cycle), _utc(app.first_cycle)
     while dt >= first:
