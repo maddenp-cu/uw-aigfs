@@ -41,7 +41,10 @@ cmd() {
 
 deploy() {
   local d playbook
-  test $# -eq 0 && echo "usage: $(basename $0) ${FUNCNAME[0]} <playbook>" && exit 1
+  if [[ $# -eq 0 ]]; then
+    echo "usage: $(basename $0) ${FUNCNAME[0]} <playbook>"
+    exit 1
+  fi
   playbook=$1
   d=$(rootdir)/etc/ansible
   export ANSIBLE_CONFIG=$d/ansible.cfg
@@ -210,7 +213,10 @@ yamlfiles() {
 
 # Main entry point:
 
-test $# -eq 0 && echo "usage: $(basename $0) tool [args ...]" && exit 1
+if [[ $# -eq 0 ]]; then
+  echo "usage: $(basename $0) tool [args ...]"
+  exit 1
+fi
 tool=$1
 shift
 $tool "$@"
