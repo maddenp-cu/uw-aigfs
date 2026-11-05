@@ -1,0 +1,6 @@
+app:
+  cycle_freq: !timedelta 6
+  workflow:
+    remote_exec_forecast: /bin/true
+    window_prune: true
+    window_size: 2
