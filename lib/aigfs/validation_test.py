@@ -1,4 +1,5 @@
 from datetime import timedelta
+from pathlib import Path
 
 from pydantic import ValidationError
 from pytest import fixture, mark, raises
@@ -128,6 +129,15 @@ def test_validation_App__required(args_app, with_del):
             validation.App(**with_del(args_app, key))
         assert e.value.error_count() == 1
         assert e.value.errors()[0]["type"] == "missing"
+
+
+def test_validation_App__paths(args_app):
+    obj = validation.App(**args_app)
+    dumped = obj.model_dump()
+    for key in ["home", "modeldir", "rundir"]:
+        assert isinstance(getattr(obj, key), Path)
+        assert isinstance(dumped[key], str)
+        assert dumped[key] == str(getattr(obj, key))
 
 
 @mark.parametrize("hours", [0, -1])

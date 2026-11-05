@@ -7,12 +7,23 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 from pprint import pformat
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, ValidationError, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    PlainSerializer,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from aigfs.common import platforms
 from aigfs.strings import STR
+
+# Types
+
+StrPath = Annotated[Path, PlainSerializer(str, return_type=str)]
 
 # Validation classes
 
@@ -94,11 +105,11 @@ class App(BaseModel):
 
     cycle_freq: timedelta | None = None
     first_cycle: datetime | None = None
-    home: Path
+    home: StrPath
     last_cycle: datetime | None = None
-    modeldir: Path
+    modeldir: StrPath
     platform: Platform
-    rundir: Path
+    rundir: StrPath
     time: Time
 
     @field_validator("cycle_freq")
