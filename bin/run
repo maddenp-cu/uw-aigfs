@@ -36,7 +36,6 @@ cmd() {
   CONDARC=$(rootdir)/.condarc
   export CONDARC
   conda run --live-stream --name $env "$@"
-  unset CONDARC
 }
 
 deploy() {
@@ -67,7 +66,6 @@ make_docs() {
   export PYTHONWARNINGS="ignore:Error parsing type annotation"
   cmd $(env) pdoc --output-dir $outdir $rootdir/lib/aigfs
   msg Built documentation in $outdir
-  unset PYTHONWARNINGS
 }
 
 make_env() {
@@ -85,7 +83,7 @@ rmenv() {
 
 typecheck() {
   msg Typechecking Python code
-  cmd $(env) MYPYPATH=$(rootdir)/drivers mypy $(pyfiles)
+  cmd $(env) mypy $(pyfiles)
 }
 
 unittest() {
@@ -186,7 +184,6 @@ EOF
     conda env update --file $update --name $env --quiet
     msg Updated environment $env with $prefix
   done
-  unset PIP_VERBOSE XDG_CACHE_HOME
 }
 
 msg() {
