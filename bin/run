@@ -19,7 +19,7 @@ bootstrap() {
     test $os == Darwin && os=MacOSX
     machine=$(uname -m)
     installer=Miniforge3-$os-$machine.sh
-    version=26.3.2-3
+    version=26.9.4-1
     curl -sSLO https://github.com/conda-forge/miniforge/releases/download/$version/$installer
     bash $installer -bfp $condadir
     rm -v $installer
