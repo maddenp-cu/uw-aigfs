@@ -13,7 +13,7 @@ from typing import TypeVar
 
 from iotaa import Asset, Node, collection, external, task
 from pydantic import BaseModel, ConfigDict, PositiveInt
-from uwtools.api.config import realize_to_dict
+from uwtools.api.config import YAMLConfig, realize_to_dict
 from uwtools.api.driver import Driver
 from uwtools.api.logging import use_uwtools_logger
 from uwtools.api.utils import run_shell_cmd
@@ -23,8 +23,7 @@ from aigfs.drivers.ics import AIGFSICs
 from aigfs.drivers.inference import AIGFSInference
 from aigfs.drivers.post import AIGFSPost
 from aigfs.strings import STR
-from aigfs.validation import App as App_
-from aigfs.validation import Config as Config_
+from aigfs.validation import App, Config, validate
 
 APPDIR = Path(os.environ.get("APPDIR") or Path.cwd())
 CONFIG = APPDIR / STR.aigfs_yaml
@@ -36,33 +35,34 @@ use_uwtools_logger()
 # Validation classes:
 
 
-class AppCycles(App_):
-    cycle_freq: timedelta
-    first_cycle: datetime
-    last_cycle: datetime
-
-
-class AppRealtime(App_):
-    cycle_freq: timedelta
-
-
-class User(BaseModel):
-    model_config = ConfigDict(extra="allow", strict=True)
+class Workflow(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    remote_exec_forecast: str | None = None
     window_prune: bool = False
     window_size: PositiveInt
 
 
-class ConfigCycles(Config_):
-    app: AppCycles
-    user: User  # type: ignore[assignment]
+class AppRealtime(App):
+    cycle_freq: timedelta
+    workflow: Workflow
 
 
-class ConfigRealtime(Config_):
+class AppRetro(App):
+    cycle_freq: timedelta
+    first_cycle: datetime
+    last_cycle: datetime
+    workflow: Workflow
+
+
+class ConfigRealtime(Config):
     app: AppRealtime
-    user: User  # type: ignore[assignment]
 
 
-ConfigT = TypeVar("ConfigT", ConfigCycles, ConfigRealtime)
+class ConfigRetro(Config):
+    app: AppRetro
+
+
+ConfigT = TypeVar("ConfigT", ConfigRetro, ConfigRealtime)
 
 # Public tasks:
 
@@ -78,8 +78,8 @@ def config() -> Iterator:
     yield None
     user = APPDIR / "user.yaml"
     raw_config = setup.compose_configs(workflow=None, platform=STR.oci, user_config_files=[user])
-    valid_config = setup.validate(raw_config)
-    setup.set_up_rundir(valid_config, workflow=None, prefix=taskname)
+    valid_config = setup.validate(raw_config, model=ConfigRealtime)
+    YAMLConfig(valid_config.model_dump()).dump(CONFIG)
 
 
 @collection
@@ -101,7 +101,7 @@ def cycles() -> Iterator:
     # Process leading-edge cycles first.
 
     yield "cycles"
-    app = _config(ConfigCycles).app
+    app = _config(ConfigRetro).app
     dts = []
     dt, first = _utc(app.last_cycle), _utc(app.first_cycle)
     while dt >= first:
@@ -123,7 +123,7 @@ def forecast(cycle_: CycleT) -> Iterator:
     assets = [Asset(path, path.is_file) for path in driver.output[STR.forecast]]
     yield assets
     yield prep(dt)
-    prefix = "srun --exclusive --nodes=1 --time=30"
+    prefix = _config(ConfigRealtime).app.workflow.remote_exec_forecast
     cmd = _cmd(driver, key_path, dt, prefix=prefix)
     _execute(cmd, driver.rundir, taskname, assets)
 
@@ -173,11 +173,11 @@ def realtime() -> Iterator:
     # Process leading-edge cycles, latest first. Optionally remove trailing-edge cycle directories.
 
     c = _config(ConfigRealtime)
-    yield f"{c.user.window_size} realtime cycles"
+    yield f"{c.app.workflow.window_size} realtime cycles"
     ts = datetime.now(UTC).timestamp()
-    n = c.user.window_size
+    n = c.app.workflow.window_size
     latest = datetime.fromtimestamp(ts - (ts % c.app.cycle_freq.total_seconds()), UTC)
-    reqs: list[Node] = [_prune(Path(c.app.rundir), n)] if c.user.window_prune else []
+    reqs: list[Node] = [_prune(Path(c.app.rundir), n)] if c.app.workflow.window_prune else []
     reqs.extend([cycle(latest - (n * c.app.cycle_freq)) for n in range(n)])
     yield reqs
 
@@ -264,10 +264,10 @@ def _cmd(
     key_path: list,
     dt: datetime,
     leadtime: timedelta | None = None,
-    prefix: str = "",
+    prefix: str | None = None,
 ) -> str:
     cmd = [
-        prefix,
+        prefix or "",
         f"{APPDIR}/bin/run cmd",
         "uw execute",
         "--module %s" % driver.__module__,
@@ -284,7 +284,7 @@ def _cmd(
 
 @cache
 def _config(model: type[ConfigT]) -> ConfigT:
-    return model.model_validate(realize_to_dict(CONFIG))
+    return validate(realize_to_dict(CONFIG), model)
 
 
 def _dt_taskname(cycle_: CycleT, step: str) -> tuple[datetime, str]:
